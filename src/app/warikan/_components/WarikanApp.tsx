@@ -66,7 +66,11 @@ export default function WarikanApp() {
     // ─── Reveal Animation State ───
     const [revealIdx, setRevealIdx] = useState<number>(0);
     const [traceProgress, setTraceProgress] = useState<number>(0);
+    const [isFeintHold, setIsFeintHold] = useState<boolean>(false);
     const [copiedSummary, setCopiedSummary] = useState<boolean>(false);
+    /** 泣きの1回（天丼判定用：前回の最高額メンバーIDと泣きの回数） */
+    const [lastSponsorId, setLastSponsorId] = useState<number | null>(null);
+    const [nakiCount, setNakiCount] = useState<number>(0);
 
     const mashTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
     const revealRafRef = useRef<number | null>(null);
@@ -235,21 +239,77 @@ export default function WarikanApp() {
         });
     }, [ladder, members, pillarAssignments, goalAmounts]);
 
-    // Reveal フェーズの 3D 降下アニメーション
+    // 精算の最大・最小金額（Reveal 演出分岐でも参照）
+    const maxPaid = useMemo(
+        () => Math.max(0, ...finalResults.map((r) => r.amount)),
+        [finalResults]
+    );
+    const minPaid = useMemo(
+        () => (finalResults.length > 0 ? Math.min(...finalResults.map((r) => r.amount)) : 0),
+        [finalResults]
+    );
+
+    const currentSponsor = useMemo(
+        () =>
+            maxPaid > minPaid
+                ? finalResults.find((r) => r.amount === maxPaid) ?? null
+                : null,
+        [finalResults, maxPaid, minPaid]
+    );
+
+    const isTendonSponsor =
+        nakiCount > 0 &&
+        lastSponsorId !== null &&
+        currentSponsor !== null &&
+        currentSponsor.member.id === lastSponsorId;
+
+    // Reveal フェーズの 3D 降下アニメーション（ゴール直前 0.8秒の寸止めフェイント付き！）
     useEffect(() => {
         if (stage !== "reveal" || finalResults.length === 0) return;
 
-        const durationMs = 1500;
+        const currentResult = finalResults[revealIdx];
+        if (!currentResult) return;
+
+        const descentMs = 1200;
+        const holdMs = 800; // 志村さん流「0.8秒の寸止めタメ（間）」
+        const dropMs = 260;
+        const totalMs = descentMs + holdMs + dropMs;
+
         const start = performance.now();
+        let holdSoundPlayed = false;
+        setIsFeintHold(false);
         soundManager.playBallSweep();
 
         const tick = (now: number) => {
-            const p = Math.min(1, (now - start) / durationMs);
-            setTraceProgress(p);
-            if (p < 1) {
+            const elapsed = now - start;
+            if (elapsed < descentMs) {
+                setTraceProgress((elapsed / descentMs) * 0.86);
+                revealRafRef.current = requestAnimationFrame(tick);
+            } else if (elapsed < descentMs + holdMs) {
+                // ゴール直前でピタッと止める寸止めフェイント！
+                setTraceProgress(0.86);
+                if (!holdSoundPlayed) {
+                    holdSoundPlayed = true;
+                    setIsFeintHold(true);
+                    soundManager.playTensionHold();
+                }
+                revealRafRef.current = requestAnimationFrame(tick);
+            } else if (elapsed < totalMs) {
+                setIsFeintHold(false);
+                const dropT = (elapsed - descentMs - holdMs) / dropMs;
+                setTraceProgress(0.86 + dropT * 0.14);
                 revealRafRef.current = requestAnimationFrame(tick);
             } else {
-                soundManager.playBallCorner();
+                setIsFeintHold(false);
+                setTraceProgress(1);
+                if (currentResult.amount === 0) {
+                    soundManager.playResult("大吉");
+                    confetti({ particleCount: 90, spread: 80, origin: { y: 0.65 } });
+                } else if (currentResult.amount === maxPaid && maxPaid > minPaid) {
+                    soundManager.playZukkoke();
+                } else {
+                    soundManager.playBallCorner();
+                }
             }
         };
         revealRafRef.current = requestAnimationFrame(tick);
@@ -257,7 +317,7 @@ export default function WarikanApp() {
         return () => {
             if (revealRafRef.current) cancelAnimationFrame(revealRafRef.current);
         };
-    }, [stage, revealIdx, finalResults.length]);
+    }, [stage, revealIdx, finalResults, maxPaid, minPaid]);
 
     const fireSummaryConfetti = () => {
         soundManager.playResult("大吉");
@@ -272,6 +332,7 @@ export default function WarikanApp() {
         if (revealIdx + 1 < finalResults.length) {
             setRevealIdx(revealIdx + 1);
             setTraceProgress(0);
+            setIsFeintHold(false);
         } else {
             setStage("summary");
             fireSummaryConfetti();
@@ -280,20 +341,20 @@ export default function WarikanApp() {
 
     const handleSkipToSummary = () => {
         if (revealRafRef.current) cancelAnimationFrame(revealRafRef.current);
+        setIsFeintHold(false);
         setTraceProgress(1);
         setStage("summary");
         fireSummaryConfetti();
     };
 
-    // 精算シェアテキスト生成
-    const maxPaid = useMemo(
-        () => Math.max(0, ...finalResults.map((r) => r.amount)),
-        [finalResults]
-    );
-    const minPaid = useMemo(
-        () => (finalResults.length > 0 ? Math.min(...finalResults.map((r) => r.amount)) : 0),
-        [finalResults]
-    );
+    /** 最高額（スポンサー様）専用の「🔥 泣きの1回（全員再シャッフル）」 */
+    const handleNakiRetry = () => {
+        soundManager.playPon();
+        setLastSponsorId(currentSponsor?.member.id ?? null);
+        setNakiCount((c) => c + 1);
+        prepareLadderAndAmounts();
+        setStage("select");
+    };
 
     const summaryText = useMemo(() => {
         const lines = finalResults.map((r) => {
@@ -301,14 +362,26 @@ export default function WarikanApp() {
                 r.amount === 0
                     ? " 🎉タダ飯！"
                     : r.amount === maxPaid && maxPaid > minPaid
-                    ? " 🔥MVP"
+                    ? " 👑今夜のスポンサー様"
                     : "";
             return `・${r.member.name}: ¥${r.amount.toLocaleString()}${tag}`;
         });
+        const tendonLine = isTendonSponsor
+            ? `\n😂 泣きの${nakiCount}回目で天丼達成！またしても ${currentSponsor?.member.name} がスポンサー様！`
+            : "";
         return `🌌 Cosmic Amida 宇宙割り勘 結果発表！\n合計: ¥${totalAmount.toLocaleString()}（${memberCount}人）\n${lines.join(
             "\n"
-        )}\n#CosmicAmida #宇宙割り勘`;
-    }, [finalResults, totalAmount, memberCount, maxPaid, minPaid]);
+        )}${tendonLine}\n#CosmicAmida #宇宙割り勘`;
+    }, [
+        finalResults,
+        totalAmount,
+        memberCount,
+        maxPaid,
+        minPaid,
+        isTendonSponsor,
+        nakiCount,
+        currentSponsor,
+    ]);
 
     const handleShareLine = () => {
         const url = `https://line.me/R/share?text=${encodeURIComponent(
@@ -796,9 +869,20 @@ export default function WarikanApp() {
                         </h2>
 
                         {traceProgress < 1 ? (
-                            <div className="py-6 text-lg font-bold text-amber-200 animate-pulse">
-                                ✨ 光の玉が宇宙あみだを降下中… ✨
-                            </div>
+                            isFeintHold ? (
+                                <div className="py-6 space-y-1">
+                                    <p className="text-xl sm:text-2xl font-black text-amber-300 animate-bounce">
+                                        ……おっ！？ ちょっと待て！！
+                                    </p>
+                                    <p className="text-xs text-blue-200">
+                                        ゴール直前でピタッと止まった……！
+                                    </p>
+                                </div>
+                            ) : (
+                                <div className="py-6 text-lg font-bold text-amber-200 animate-pulse">
+                                    ✨ 光の玉が宇宙あみだを降下中… ✨
+                                </div>
+                            )
                         ) : (
                             <div className="py-4 space-y-2">
                                 <div className="text-5xl sm:text-6xl font-black text-transparent bg-clip-text bg-gradient-to-r from-amber-300 via-yellow-100 to-orange-400">
@@ -808,6 +892,16 @@ export default function WarikanApp() {
                                     <p className="text-base font-extrabold text-emerald-300">
                                         🎉 奇跡のタダ飯確定！！ 🎉
                                     </p>
+                                )}
+                                {finalResults[revealIdx].amount === maxPaid && maxPaid > minPaid && (
+                                    <div className="space-y-0.5">
+                                        <p className="text-base font-extrabold text-rose-300">
+                                            👑 今夜のスポンサー様 決定！！（ズコーッ！）
+                                        </p>
+                                        <p className="text-xs text-amber-200/90">
+                                            特権：次の店・乾杯の音頭の決定権を獲得！
+                                        </p>
+                                    </div>
                                 )}
                             </div>
                         )}
@@ -851,6 +945,17 @@ export default function WarikanApp() {
                             </p>
                         </div>
 
+                        {isTendonSponsor && currentSponsor && (
+                            <div className="rounded-xl border border-rose-400/70 bg-rose-950/60 p-3 text-center space-y-0.5 animate-bounce">
+                                <p className="text-sm font-black text-amber-200">
+                                    😂 天丼達成！！（泣きの{nakiCount}回目）
+                                </p>
+                                <p className="text-xs text-rose-100">
+                                    またしても {currentSponsor.member.name} が「今夜のスポンサー様」に降臨！！
+                                </p>
+                            </div>
+                        )}
+
                         {allocationWarning && (
                             <p className="rounded-lg border border-amber-400/40 bg-amber-950/50 px-3 py-2 text-xs text-amber-200">
                                 ※ {allocationWarning}
@@ -872,7 +977,7 @@ export default function WarikanApp() {
                                                 : "border-blue-300/20 bg-slate-900/75"
                                         }`}
                                     >
-                                        <div className="flex items-center gap-2">
+                                        <div className="flex flex-wrap items-center gap-2">
                                             <span className="font-extrabold text-white">
                                                 {r.member.name}
                                             </span>
@@ -882,8 +987,8 @@ export default function WarikanApp() {
                                                 </span>
                                             )}
                                             {isTop && (
-                                                <span className="rounded-full bg-rose-500/25 px-2 py-0.5 text-[10px] font-bold text-rose-200">
-                                                    🔥 本日のMVP
+                                                <span className="rounded-full bg-amber-400/25 px-2 py-0.5 text-[10px] font-bold text-amber-200">
+                                                    👑 今夜のスポンサー様
                                                 </span>
                                             )}
                                         </div>
@@ -894,6 +999,21 @@ export default function WarikanApp() {
                                 );
                             })}
                         </ul>
+
+                        {currentSponsor && (
+                            <div className="rounded-xl border border-amber-400/35 bg-gradient-to-r from-rose-950/50 via-amber-950/40 to-rose-950/50 p-3.5 text-center space-y-2">
+                                <p className="text-xs text-amber-100">
+                                    👑 <strong>{currentSponsor.member.name}</strong> 専用ボタン（逆転なるか、天丼か…！）
+                                </p>
+                                <button
+                                    type="button"
+                                    onClick={handleNakiRetry}
+                                    className="w-full rounded-xl bg-gradient-to-r from-rose-500 via-orange-500 to-amber-500 py-2.5 text-sm font-black text-white shadow-lg hover:brightness-110 active:scale-95 transition-all"
+                                >
+                                    🔥 泣きの1回！（全員シャッフルで再勝負）
+                                </button>
+                            </div>
+                        )}
 
                         <div className="flex flex-wrap justify-center gap-2.5 pt-2">
                             <button

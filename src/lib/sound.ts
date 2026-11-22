@@ -8,6 +8,8 @@ import {
     playBallCorner,
     playConfettiShimmer,
     playResultJingle,
+    playTensionHold,
+    playZukkoke,
     resumeAudioContext,
 } from "./soundSynthesis";
 
@@ -153,6 +155,18 @@ class SoundManager {
     public playResult(resultLabel?: string | null) {
         this.unlock();
         playResultJingle(resultLabel ?? null, this._volume * 0.55);
+    }
+
+    /** ゴール直前の寸止めタメ音 */
+    public playTensionHold() {
+        this.unlock();
+        playTensionHold(this._volume * 0.6);
+    }
+
+    /** 最高額（スポンサー様）決定時のズッコケ音 */
+    public playZukkoke() {
+        this.unlock();
+        playZukkoke(this._volume * 0.65);
     }
 
     /** 全てのジングルやSEを止める */

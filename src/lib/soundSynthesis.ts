@@ -215,6 +215,68 @@ export function playResultJingle(resultLabel: string | null | undefined, volume:
     });
 }
 
+/** ゴール直前の寸止めタメ音（ドコドコ…ッ！） */
+export function playTensionHold(volume: number = 0.18): void {
+    const ctx = getContext();
+    if (!ctx) return;
+    const now = ctx.currentTime;
+    const pulses = [0, 0.14, 0.28, 0.42, 0.56];
+    pulses.forEach((offset, i) => {
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.type = "triangle";
+        osc.frequency.setValueAtTime(140 + i * 28, now + offset);
+        gain.gain.setValueAtTime(0.001, now + offset);
+        gain.gain.linearRampToValueAtTime(volume * 0.7, now + offset + 0.02);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + offset + 0.12);
+        osc.start(now + offset);
+        osc.stop(now + offset + 0.13);
+    });
+}
+
+/** 最高額（スポンサー様）用のズッコケ音（下降スライド＋チーン…） */
+export function playZukkoke(volume: number = 0.22): void {
+    const ctx = getContext();
+    if (!ctx) return;
+    const now = ctx.currentTime;
+
+    // 1. トロンボーン風「ワワワワ〜ン」下降3音
+    const notes = [
+        { f1: 311, f2: 293, start: 0, dur: 0.18 },
+        { f1: 293, f2: 277, start: 0.2, dur: 0.18 },
+        { f1: 277, f2: 196, start: 0.4, dur: 0.45 },
+    ];
+    notes.forEach(({ f1, f2, start, dur }) => {
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.type = "sawtooth";
+        osc.frequency.setValueAtTime(f1, now + start);
+        osc.frequency.exponentialRampToValueAtTime(f2, now + start + dur);
+        gain.gain.setValueAtTime(0.001, now + start);
+        gain.gain.linearRampToValueAtTime(volume * 0.55, now + start + 0.03);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + start + dur);
+        osc.start(now + start);
+        osc.stop(now + start + dur + 0.02);
+    });
+
+    // 2. 締めの「チーン…」金属ベル
+    const bell = ctx.createOscillator();
+    const bellGain = ctx.createGain();
+    bell.connect(bellGain);
+    bellGain.connect(ctx.destination);
+    bell.type = "sine";
+    bell.frequency.setValueAtTime(2093, now + 0.88);
+    bellGain.gain.setValueAtTime(0.001, now + 0.88);
+    bellGain.gain.linearRampToValueAtTime(volume * 0.65, now + 0.9);
+    bellGain.gain.exponentialRampToValueAtTime(0.0008, now + 1.6);
+    bell.start(now + 0.88);
+    bell.stop(now + 1.65);
+}
+
 export function resumeAudioContext(): void {
     const ctx = getContext();
     if (ctx?.state === "suspended") ctx.resume();

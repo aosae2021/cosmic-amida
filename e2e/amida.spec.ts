@@ -115,5 +115,8 @@ test.describe("Cosmic Amida E2E", () => {
             page.getByRole("heading", { name: /宇宙割り勘 精算表/ })
         ).toBeVisible();
         await expect(page.getByText(/合計 ¥20,000（一致 ✓）/)).toBeVisible();
+        await expect(
+            page.getByRole("button", { name: /泣きの1回/ })
+        ).toBeVisible();
     });
 });
