@@ -78,4 +78,30 @@ test.describe("Cosmic Amida E2E", () => {
         ).toBeVisible();
         await page.getByRole("button", { name: "閉じる" }).click();
     });
+
+    test("宇宙割り勘モードで最大金額指定・柱選択・精算表表示まで動作する", async ({
+        page,
+    }) => {
+        await page.goto("/warikan");
+        await expect(
+            page.getByRole("heading", { name: /宇宙割り勘あみだくじ/ })
+        ).toBeVisible();
+
+        // 合計20000円・最大上限6000円を指定して連打スキップで柱選択へ
+        await page.fill("#warikan-total", "20000");
+        await page.fill("#warikan-max", "6000");
+        await page.getByRole("button", { name: /連打をスキップしてすぐ柱を選ぶ/ }).click();
+
+        // 4人分の柱を選択
+        for (let i = 0; i < 4; i++) {
+            await page.getByRole("button", { name: new RegExp(`柱 ${i + 1}`) }).click();
+        }
+
+        // 結果を一気に見るで精算表へ
+        await page.getByRole("button", { name: /全員の結果を一気に見る/ }).click();
+        await expect(
+            page.getByRole("heading", { name: /宇宙割り勘 精算表/ })
+        ).toBeVisible();
+        await expect(page.getByText(/合計 ¥20,000（一致 ✓）/)).toBeVisible();
+    });
 });
