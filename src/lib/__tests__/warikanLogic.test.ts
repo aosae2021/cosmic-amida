@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import {
+    applyRoundUpToFund,
     calculateWarikanAmounts,
     generateWarikanLadder,
 } from "../warikanLogic";
@@ -61,5 +62,16 @@ describe("warikanLogic", () => {
             const sorted = [...ladder.startToGoal].sort((a, b) => a - b);
             expect(sorted).toEqual(Array.from({ length: n }, (_, i) => i));
         }
+    });
+
+    it("2次会軍資金（切り上げ精算）で0円を守りつつ余剰軍資金を正確に算出する", () => {
+        const res = applyRoundUpToFund([0, 4200, 5300, 6500], 1000);
+        expect(res.roundedAmounts).toEqual([0, 5000, 6000, 7000]);
+        expect(res.collectedTotal).toBe(18000);
+        expect(res.fundAmount).toBe(2000);
+
+        const noRound = applyRoundUpToFund([0, 4200, 5300, 6500], 0);
+        expect(noRound.roundedAmounts).toEqual([0, 4200, 5300, 6500]);
+        expect(noRound.fundAmount).toBe(0);
     });
 });

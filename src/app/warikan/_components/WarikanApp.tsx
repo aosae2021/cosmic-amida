@@ -5,8 +5,10 @@ import dynamic from "next/dynamic";
 import Link from "next/link";
 import confetti from "canvas-confetti";
 import {
+    applyRoundUpToFund,
     calculateWarikanAmounts,
     generateWarikanLadder,
+    type RoundUpUnit,
     type WarikanLadder,
     type WarikanPattern,
 } from "../../../lib/warikanLogic";
@@ -35,6 +37,7 @@ export default function WarikanApp() {
     const [maxAmountStr, setMaxAmountStr] = useState<string>("8000");
     const [pattern, setPattern] = useState<WarikanPattern>("one_free");
     const [rangePercent, setRangePercent] = useState<number>(30);
+    const [roundUpUnit, setRoundUpUnit] = useState<RoundUpUnit>(0);
     const [memberNames, setMemberNames] = useState<string[]>([
         "参加者1",
         "参加者2",
@@ -71,6 +74,17 @@ export default function WarikanApp() {
     /** 泣きの1回（天丼判定用：前回の最高額メンバーIDと泣きの回数） */
     const [lastSponsorId, setLastSponsorId] = useState<number | null>(null);
     const [nakiCount, setNakiCount] = useState<number>(0);
+    /** 西郷さん流「男気肩代わり（敬天愛人）」状態 */
+    const [otokogiOpen, setOtokogiOpen] = useState<boolean>(false);
+    const [otokogiHero, setOtokogiHero] = useState<{
+        heroId: number;
+        heroName: string;
+        savedId: number;
+        savedName: string;
+    } | null>(null);
+    const [showOtokogiBanner, setShowOtokogiBanner] = useState<boolean>(false);
+    const [fundAmount, setFundAmount] = useState<number>(0);
+    const [collectedTotal, setCollectedTotal] = useState<number>(0);
 
     const mashTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
     const revealRafRef = useRef<number | null>(null);
@@ -113,14 +127,20 @@ export default function WarikanApp() {
             rangePercent,
             maxPerPerson,
         });
+        const rounded = applyRoundUpToFund(alloc.amounts, roundUpUnit);
         const newLadder = generateWarikanLadder(memberCount);
-        setGoalAmounts(alloc.amounts);
+        setGoalAmounts(rounded.roundedAmounts);
+        setFundAmount(rounded.fundAmount);
+        setCollectedTotal(rounded.collectedTotal);
         setAllocationWarning(alloc.warning);
         setLadder(newLadder);
         setPillarAssignments({});
         setSelectOrderIdx(0);
         setRevealIdx(0);
         setTraceProgress(0);
+        setOtokogiOpen(false);
+        setOtokogiHero(null);
+        setShowOtokogiBanner(false);
     };
 
     const handleStartMash = () => {
@@ -356,28 +376,73 @@ export default function WarikanApp() {
         setStage("select");
     };
 
+    /** 西郷さん流「⚔️ 男気立候補（敬天愛人・肩代わり）」 */
+    const handleOtokogiTakeover = (heroMemberId: number) => {
+        if (!currentSponsor || !ladder) return;
+        const sponsorRes = finalResults.find((r) => r.member.id === currentSponsor.member.id);
+        const heroRes = finalResults.find((r) => r.member.id === heroMemberId);
+        if (!sponsorRes || !heroRes || sponsorRes.member.id === heroRes.member.id) return;
+
+        // 2人のゴール金額をスワップ（勇者が最高額を引き受け、元のスポンサーを救出）
+        const nextGoals = [...goalAmounts];
+        const tmp = nextGoals[sponsorRes.goalIndex];
+        nextGoals[sponsorRes.goalIndex] = nextGoals[heroRes.goalIndex];
+        nextGoals[heroRes.goalIndex] = tmp;
+
+        setGoalAmounts(nextGoals);
+        setOtokogiOpen(false);
+        setOtokogiHero({
+            heroId: heroRes.member.id,
+            heroName: heroRes.member.name,
+            savedId: sponsorRes.member.id,
+            savedName: sponsorRes.member.name,
+        });
+        setShowOtokogiBanner(true);
+
+        soundManager.playResult("大吉");
+        confetti({
+            particleCount: 160,
+            spread: 120,
+            origin: { y: 0.55 },
+            colors: ["#FFD700", "#FF4500", "#FFFFFF", "#FF8C00"],
+        });
+        setTimeout(() => setShowOtokogiBanner(false), 2400);
+    };
+
     const summaryText = useMemo(() => {
         const lines = finalResults.map((r) => {
             const tag =
-                r.amount === 0
+                otokogiHero && r.member.id === otokogiHero.heroId
+                    ? " ⚔️男気ヒーロー（敬天愛人）"
+                    : r.amount === 0
                     ? " 🎉タダ飯！"
                     : r.amount === maxPaid && maxPaid > minPaid
                     ? " 👑今夜のスポンサー様"
                     : "";
             return `・${r.member.name}: ¥${r.amount.toLocaleString()}${tag}`;
         });
+        const otokogiLine = otokogiHero
+            ? `\n⚔️ 男気認定！${otokogiHero.heroName} が ${otokogiHero.savedName} の最高額を肩代わり！（敬天愛人）`
+            : "";
+        const fundLine =
+            fundAmount > 0
+                ? `\n💰 2次会・アイス軍資金: ¥${fundAmount.toLocaleString()}（${roundUpUnit}円単位切り上げ）`
+                : "";
         const tendonLine = isTendonSponsor
             ? `\n😂 泣きの${nakiCount}回目で天丼達成！またしても ${currentSponsor?.member.name} がスポンサー様！`
             : "";
         return `🌌 Cosmic Amida 宇宙割り勘 結果発表！\n合計: ¥${totalAmount.toLocaleString()}（${memberCount}人）\n${lines.join(
             "\n"
-        )}${tendonLine}\n#CosmicAmida #宇宙割り勘`;
+        )}${otokogiLine}${fundLine}${tendonLine}\n#CosmicAmida #宇宙割り勘`;
     }, [
         finalResults,
         totalAmount,
         memberCount,
         maxPaid,
         minPaid,
+        otokogiHero,
+        fundAmount,
+        roundUpUnit,
         isTendonSponsor,
         nakiCount,
         currentSponsor,
@@ -644,6 +709,40 @@ export default function WarikanApp() {
                                         ))}
                                     </div>
                                 </div>
+                            )}
+                        </div>
+
+                        {/* 2次会軍資金（切り上げ精算） */}
+                        <div className="space-y-2">
+                            <div className="flex items-center justify-between">
+                                <span className="text-xs font-bold text-emerald-300">
+                                    🍶 2次会軍資金（小銭なし切り上げ精算）
+                                </span>
+                            </div>
+                            <div className="grid grid-cols-3 gap-2">
+                                {[
+                                    { unit: 0 as const, label: "なし（ピッタリ）" },
+                                    { unit: 500 as const, label: "500円単位" },
+                                    { unit: 1000 as const, label: "1,000円単位" },
+                                ].map((opt) => (
+                                    <button
+                                        key={opt.unit}
+                                        type="button"
+                                        onClick={() => setRoundUpUnit(opt.unit)}
+                                        className={`rounded-lg py-2 text-xs font-bold transition-colors ${
+                                            roundUpUnit === opt.unit
+                                                ? "bg-emerald-500 text-slate-950 shadow"
+                                                : "border border-slate-700 bg-slate-900/70 text-slate-300 hover:bg-slate-800"
+                                        }`}
+                                    >
+                                        {opt.label}
+                                    </button>
+                                ))}
+                            </div>
+                            {roundUpUnit > 0 && (
+                                <p className="text-[11px] text-emerald-200/85">
+                                    ※ 0円（タダ飯）はそのまま守り、他メンバーを {roundUpUnit.toLocaleString()}円単位で切り上げた余りを「2次会・アイス軍資金」にします。
+                                </p>
                             )}
                         </div>
 
@@ -940,10 +1039,36 @@ export default function WarikanApp() {
                                 🌌 宇宙割り勘 精算表
                             </h2>
                             <p className="text-xs text-slate-300">
-                                合計 ¥{totalAmount.toLocaleString()}（一致 ✓）
-                                {maxPerPerson ? ` / 最大上限 ¥${maxPerPerson.toLocaleString()}` : ""}
+                                会計 ¥{totalAmount.toLocaleString()}
+                                {fundAmount > 0
+                                    ? ` / 集金 ¥${collectedTotal.toLocaleString()}（軍資金 +¥${fundAmount.toLocaleString()}）`
+                                    : "（一致 ✓）"}
+                                {maxPerPerson ? ` / 上限 ¥${maxPerPerson.toLocaleString()}` : ""}
                             </p>
                         </div>
+
+                        {fundAmount > 0 && (
+                            <div className="rounded-xl border border-emerald-400/55 bg-emerald-950/50 px-4 py-3 text-center space-y-0.5">
+                                <p className="text-xs font-bold text-emerald-300">
+                                    🍶 切り上げ精算（小銭やり取りゼロ！）
+                                </p>
+                                <p className="text-lg font-black text-white">
+                                    💰 2次会・アイス軍資金：¥{fundAmount.toLocaleString()}
+                                </p>
+                            </div>
+                        )}
+
+                        {otokogiHero && (
+                            <div className="rounded-xl border border-amber-400/70 bg-gradient-to-r from-amber-950/70 via-red-950/60 to-amber-950/70 px-4 py-3 text-center space-y-0.5">
+                                <p className="text-sm font-black text-amber-200">
+                                    ⚔️ 男気認定！！（敬天愛人）
+                                </p>
+                                <p className="text-xs text-amber-100">
+                                    <strong>{otokogiHero.heroName}</strong> が{" "}
+                                    <strong>{otokogiHero.savedName}</strong> の最高額を男気で肩代わりしました！
+                                </p>
+                            </div>
+                        )}
 
                         {isTendonSponsor && currentSponsor && (
                             <div className="rounded-xl border border-rose-400/70 bg-rose-950/60 p-3 text-center space-y-0.5 animate-bounce">
@@ -981,12 +1106,22 @@ export default function WarikanApp() {
                                             <span className="font-extrabold text-white">
                                                 {r.member.name}
                                             </span>
+                                            {otokogiHero && r.member.id === otokogiHero.heroId && (
+                                                <span className="rounded-full bg-amber-400/30 border border-amber-300/60 px-2 py-0.5 text-[10px] font-black text-amber-200">
+                                                    ⚔️ 男気ヒーロー
+                                                </span>
+                                            )}
+                                            {otokogiHero && r.member.id === otokogiHero.savedId && (
+                                                <span className="rounded-full bg-sky-500/25 px-2 py-0.5 text-[10px] font-bold text-sky-200">
+                                                    🙏 救出された人
+                                                </span>
+                                            )}
                                             {isFree && (
                                                 <span className="rounded-full bg-emerald-500/25 px-2 py-0.5 text-[10px] font-bold text-emerald-200">
                                                     🎉 タダ飯
                                                 </span>
                                             )}
-                                            {isTop && (
+                                            {isTop && (!otokogiHero || r.member.id !== otokogiHero.heroId) && (
                                                 <span className="rounded-full bg-amber-400/25 px-2 py-0.5 text-[10px] font-bold text-amber-200">
                                                     👑 今夜のスポンサー様
                                                 </span>
@@ -1001,17 +1136,51 @@ export default function WarikanApp() {
                         </ul>
 
                         {currentSponsor && (
-                            <div className="rounded-xl border border-amber-400/35 bg-gradient-to-r from-rose-950/50 via-amber-950/40 to-rose-950/50 p-3.5 text-center space-y-2">
-                                <p className="text-xs text-amber-100">
-                                    👑 <strong>{currentSponsor.member.name}</strong> 専用ボタン（逆転なるか、天丼か…！）
-                                </p>
-                                <button
-                                    type="button"
-                                    onClick={handleNakiRetry}
-                                    className="w-full rounded-xl bg-gradient-to-r from-rose-500 via-orange-500 to-amber-500 py-2.5 text-sm font-black text-white shadow-lg hover:brightness-110 active:scale-95 transition-all"
-                                >
-                                    🔥 泣きの1回！（全員シャッフルで再勝負）
-                                </button>
+                            <div className="space-y-2.5">
+                                <div className="rounded-xl border border-amber-400/35 bg-gradient-to-r from-rose-950/50 via-amber-950/40 to-rose-950/50 p-3.5 text-center space-y-2">
+                                    <p className="text-xs text-amber-100">
+                                        👑 <strong>{currentSponsor.member.name}</strong> 専用ボタン（逆転なるか、天丼か…！）
+                                    </p>
+                                    <button
+                                        type="button"
+                                        onClick={handleNakiRetry}
+                                        className="w-full rounded-xl bg-gradient-to-r from-rose-500 via-orange-500 to-amber-500 py-2.5 text-sm font-black text-white shadow-lg hover:brightness-110 active:scale-95 transition-all"
+                                    >
+                                        🔥 泣きの1回！（全員シャッフルで再勝負）
+                                    </button>
+                                </div>
+
+                                {/* 西郷さん流：男気立候補（敬天愛人・肩代わり） */}
+                                <div className="rounded-xl border border-amber-300/40 bg-slate-900/80 p-3.5 text-center space-y-2.5">
+                                    <button
+                                        type="button"
+                                        onClick={() => setOtokogiOpen((v) => !v)}
+                                        className="w-full rounded-xl border border-amber-400/60 bg-gradient-to-r from-amber-600/30 to-red-600/30 py-2.5 text-sm font-black text-amber-200 hover:bg-amber-600/40 transition-colors"
+                                    >
+                                        ⚔️ 男気立候補（誰かが {currentSponsor.member.name} を救う！）
+                                    </button>
+                                    {otokogiOpen && (
+                                        <div className="space-y-2 pt-1">
+                                            <p className="text-[11px] text-amber-100/90">
+                                                「おいは構わん！最高額は俺が引き受ける！」という勇者を選んでください：
+                                            </p>
+                                            <div className="flex flex-wrap justify-center gap-2">
+                                                {finalResults
+                                                    .filter((r) => r.member.id !== currentSponsor.member.id)
+                                                    .map((cand) => (
+                                                        <button
+                                                            key={cand.member.id}
+                                                            type="button"
+                                                            onClick={() => handleOtokogiTakeover(cand.member.id)}
+                                                            className="rounded-full border border-amber-300/60 bg-amber-500/20 px-4 py-1.5 text-xs font-extrabold text-white hover:bg-amber-500/45 transition-colors"
+                                                        >
+                                                            ⚔️ {cand.member.name} が肩代わり
+                                                        </button>
+                                                    ))}
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
                             </div>
                         )}
 
@@ -1058,6 +1227,26 @@ export default function WarikanApp() {
 
                         <AdSlot className="pt-4" />
                     </section>
+                )}
+                {/* 西郷さん流：男気認定オーバーレイ演出 */}
+                {showOtokogiBanner && otokogiHero && (
+                    <div
+                        role="status"
+                        aria-live="assertive"
+                        className="fixed inset-0 z-[1300] flex items-center justify-center bg-black/75 p-4 backdrop-blur-sm pointer-events-none"
+                    >
+                        <div className="rounded-3xl border-2 border-amber-400 bg-gradient-to-b from-red-950/95 via-slate-950/95 to-amber-950/95 px-8 py-10 text-center shadow-[0_0_80px_rgba(251,191,36,0.6)] space-y-3 animate-bounce">
+                            <p className="text-xs font-bold tracking-[0.4em] text-amber-300">
+                                敬 天 愛 人
+                            </p>
+                            <p className="text-4xl sm:text-5xl font-black text-transparent bg-clip-text bg-gradient-to-b from-yellow-100 via-amber-300 to-orange-500">
+                                ⚔️ 男気認定！！
+                            </p>
+                            <p className="text-base sm:text-lg font-extrabold text-white">
+                                {otokogiHero.heroName} が {otokogiHero.savedName} を救出！！
+                            </p>
+                        </div>
+                    </div>
                 )}
             </main>
         </div>

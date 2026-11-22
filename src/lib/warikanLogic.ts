@@ -7,6 +7,13 @@
  */
 
 export type WarikanPattern = "equal" | "one_free" | "random_range";
+export type RoundUpUnit = 0 | 500 | 1000;
+
+export interface RoundUpFundResult {
+    roundedAmounts: number[];
+    fundAmount: number;
+    collectedTotal: number;
+}
 
 export interface WarikanInput {
     totalAmount: number;
@@ -248,4 +255,32 @@ export function generateWarikanLadder(
     });
 
     return { memberCount: n, levels, bridges, startToGoal };
+}
+
+/**
+ * 2次会軍資金（切り上げ精算）を計算する。
+ * - 0円（タダ飯）の人は 0円のまま保護する。
+ * - それ以外の金額を roundUnit（500円 or 1000円）単位で切り上げ、
+ *   差額の合計を「2次会・アイス軍資金（fundAmount）」として返す。
+ */
+export function applyRoundUpToFund(
+    amounts: number[],
+    roundUnit: RoundUpUnit
+): RoundUpFundResult {
+    const baseTotal = amounts.reduce((a, b) => a + b, 0);
+    if (roundUnit <= 0) {
+        return {
+            roundedAmounts: [...amounts],
+            fundAmount: 0,
+            collectedTotal: baseTotal,
+        };
+    }
+
+    const roundedAmounts = amounts.map((amt) =>
+        amt <= 0 ? 0 : Math.ceil(amt / roundUnit) * roundUnit
+    );
+    const collectedTotal = roundedAmounts.reduce((a, b) => a + b, 0);
+    const fundAmount = Math.max(0, collectedTotal - baseTotal);
+
+    return { roundedAmounts, fundAmount, collectedTotal };
 }
