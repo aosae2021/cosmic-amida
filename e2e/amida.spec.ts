@@ -9,13 +9,24 @@
 import { test, expect } from "@playwright/test";
 
 test.describe("Cosmic Amida E2E", () => {
-    test("トップページが表示され選択案内とナビゲーションが出る", async ({ page }) => {
+    test("トップページに入口モード選択が表示され、3Dおみくじへ進める", async ({ page }) => {
         const consoleErrors: string[] = [];
         page.on("console", (msg) => {
             if (msg.type() === "error") consoleErrors.push(msg.text());
         });
 
         await page.goto("/");
+        await expect(
+            page.getByRole("link", { name: /飲み会・宇宙割り勘/ })
+        ).toBeVisible({ timeout: 15000 });
+        await expect(
+            page.getByRole("button", { name: /3D 宇宙おみくじ/ })
+        ).toBeVisible();
+        await expect(
+            page.getByRole("button", { name: /カスタムあみだくじ/ })
+        ).toBeVisible();
+
+        await page.getByRole("button", { name: /3D 宇宙おみくじ/ }).click();
         await expect(
             page.getByText("柱を選んでください", { exact: true })
         ).toBeVisible({ timeout: 15000 });
@@ -35,7 +46,7 @@ test.describe("Cosmic Amida E2E", () => {
     test("スキップで結果画面まで遷移し、シェアボタンともう一度ボタンが表示される", async ({
         page,
     }) => {
-        await page.goto("/");
+        await page.goto("/?mode=fortune");
         await expect(
             page.getByText("柱を選んでください", { exact: true })
         ).toBeVisible({ timeout: 15000 });

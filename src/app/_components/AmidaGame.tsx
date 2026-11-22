@@ -10,6 +10,7 @@
  */
 
 import { Suspense, useEffect, useRef, useState } from "react";
+import Link from "next/link";
 import { Canvas } from "@react-three/fiber";
 import { useGameStore } from "../../hooks/useGameStore";
 import { useReducedMotion } from "../../hooks/useReducedMotion";
@@ -69,6 +70,7 @@ export default function AmidaGame() {
     const setCustomConfig = useGameStore((s) => s.setCustomConfig);
     const reducedMotion = useReducedMotion();
     const [customModalOpen, setCustomModalOpen] = useState(false);
+    const [showEntrance, setShowEntrance] = useState(true);
 
     // WebGL 対応チェック（クライアントサイドのみ）
     const [webglSupported, setWebglSupported] = useState(true);
@@ -90,6 +92,10 @@ export default function AmidaGame() {
         const parsed = parseCustomAmidaFromSearch(search);
         if (parsed) {
             setCustomConfig(parsed);
+            setShowEntrance(false);
+        }
+        if (params.get("mode") === "fortune") {
+            setShowEntrance(false);
         }
     }, [setCustomConfig]);
 
@@ -156,8 +162,83 @@ export default function AmidaGame() {
                 />
             )}
 
+            {/* 入口：モード選択オーバーレイ（初回表示時、カスタムURL共有時は自動スキップ） */}
+            {showEntrance && phase === "selecting" && (
+                <div
+                    role="dialog"
+                    aria-modal="true"
+                    aria-labelledby="entrance-heading"
+                    className="fixed inset-0 z-[1100] flex items-center justify-center bg-slate-950/65 p-4 backdrop-blur-sm"
+                >
+                    <div className="w-full max-w-md rounded-3xl border border-blue-300/30 bg-[#060d24]/90 p-6 sm:p-7 text-slate-100 shadow-[0_0_60px_rgba(69,126,255,0.3)] space-y-5">
+                        <div className="text-center space-y-1.5">
+                            <p className="text-[11px] font-bold uppercase tracking-[0.28em] text-blue-300">
+                                3D Space Amidakuji
+                            </p>
+                            <h1
+                                id="entrance-heading"
+                                className="text-3xl font-black tracking-wide text-transparent bg-clip-text bg-gradient-to-r from-white via-blue-200 to-amber-200"
+                            >
+                                ✨ Cosmic Amida
+                            </h1>
+                            <p className="text-xs sm:text-sm text-blue-100/80">
+                                遊びたいモードを選んでください
+                            </p>
+                        </div>
+
+                        <div className="space-y-3">
+                            <Link
+                                href="/warikan"
+                                className="group block w-full rounded-2xl border border-amber-300/60 bg-gradient-to-r from-amber-500/20 via-orange-500/15 to-rose-500/20 p-4 transition-all hover:scale-[1.02] hover:border-amber-300 hover:shadow-[0_0_24px_rgba(251,191,36,0.3)]"
+                            >
+                                <div className="flex items-center justify-between">
+                                    <span className="text-base sm:text-lg font-black text-amber-200">
+                                        🍻 飲み会・宇宙割り勘
+                                    </span>
+                                    <span className="rounded-full bg-amber-400 px-2 py-0.5 text-[10px] font-black text-slate-950">
+                                        人気
+                                    </span>
+                                </div>
+                                <p className="mt-1 text-xs text-slate-200/90 leading-relaxed">
+                                    連打ゲームで順番決め！1人無料・ランダム傾斜・最大金額の上限設定つき
+                                </p>
+                            </Link>
+
+                            <button
+                                type="button"
+                                onClick={() => setShowEntrance(false)}
+                                className="w-full rounded-2xl border border-blue-300/45 bg-blue-950/60 p-4 text-left transition-all hover:scale-[1.02] hover:border-blue-300 hover:bg-blue-900/60"
+                            >
+                                <div className="text-base sm:text-lg font-black text-white">
+                                    🔮 3D 宇宙おみくじ
+                                </div>
+                                <p className="mt-1 text-xs text-blue-100/80 leading-relaxed">
+                                    太陽や惑星が巡る宇宙空間で、今日の運勢（大吉〜末吉）を占う
+                                </p>
+                            </button>
+
+                            <button
+                                type="button"
+                                onClick={() => {
+                                    setShowEntrance(false);
+                                    setCustomModalOpen(true);
+                                }}
+                                className="w-full rounded-2xl border border-indigo-300/35 bg-slate-900/70 p-4 text-left transition-all hover:scale-[1.02] hover:border-indigo-300 hover:bg-indigo-950/60"
+                            >
+                                <div className="text-base sm:text-lg font-black text-indigo-100">
+                                    ⚙️ カスタムあみだくじ
+                                </div>
+                                <p className="mt-1 text-xs text-slate-300 leading-relaxed">
+                                    ランチ決め・景品抽選・担当決めを自由に入力して URL で共有
+                                </p>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
             {/* 柱選択時の説明（画面上部に固定・柱の数値とかぶらない） */}
-            {phase === "selecting" && (
+            {!showEntrance && phase === "selecting" && (
                 <div
                     style={{
                         position: "absolute",
@@ -219,8 +300,8 @@ export default function AmidaGame() {
             {/* ボリュームスライダー（常時表示） */}
             <VolumeSlider />
 
-            {/* スキップボタン（結果画面以外で表示） */}
-            {phase !== "result" && (
+            {/* スキップボタン（入口非表示＆結果画面以外で表示） */}
+            {!showEntrance && phase !== "result" && (
                 <button
                     onClick={handleSkip}
                     style={{
@@ -252,16 +333,26 @@ export default function AmidaGame() {
                 </button>
             )}
 
-            {/* カスタム設定ボタン（選択フェーズのみ右上表示） */}
-            {phase === "selecting" && (
-                <button
-                    type="button"
-                    onClick={() => setCustomModalOpen(true)}
-                    aria-label="カスタムあみだくじを設定する"
-                    className="absolute top-5 right-5 z-[1000] rounded-lg border border-blue-300/45 bg-slate-950/65 px-3.5 py-2 text-sm font-bold text-blue-100 backdrop-blur-md transition-all hover:scale-105 hover:bg-blue-900/60 shadow-lg"
-                >
-                    ⚙️ {customGoals ? "カスタム中" : "カスタム"}
-                </button>
+            {/* 右上ボタン群（モード選択へ戻る・カスタム設定：選択フェーズのみ表示） */}
+            {!showEntrance && phase === "selecting" && (
+                <div className="absolute top-5 right-5 z-[1000] flex items-center gap-2">
+                    <button
+                        type="button"
+                        onClick={() => setShowEntrance(true)}
+                        aria-label="モード選択に戻る"
+                        className="rounded-lg border border-slate-400/40 bg-slate-950/65 px-3 py-2 text-xs sm:text-sm font-bold text-slate-200 backdrop-blur-md transition-all hover:scale-105 hover:bg-slate-800/70 shadow-lg"
+                    >
+                        🏠 モード
+                    </button>
+                    <button
+                        type="button"
+                        onClick={() => setCustomModalOpen(true)}
+                        aria-label="カスタムあみだくじを設定する"
+                        className="rounded-lg border border-blue-300/45 bg-slate-950/65 px-3.5 py-2 text-xs sm:text-sm font-bold text-blue-100 backdrop-blur-md transition-all hover:scale-105 hover:bg-blue-900/60 shadow-lg"
+                    >
+                        ⚙️ {customGoals ? "カスタム中" : "カスタム"}
+                    </button>
+                </div>
             )}
 
             {/* カスタムあみだくじ設定モーダル */}
