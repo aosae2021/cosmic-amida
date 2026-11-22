@@ -60,14 +60,18 @@ export default function AmidaScene({ config, reducedMotion }: AmidaSceneProps) {
 
     const resetCount = useGameStore((s) => s.resetCount);
     const phase = useGameStore((s) => s.phase);
+    const customGoals = useGameStore((s) => s.customGoals);
 
-    // Results (Randomized)
+    // Results (Custom goals if provided, otherwise randomized fortune)
     const pillarLabels = useMemo(() => {
+        if (customGoals && customGoals.length === layout.pillarCount) {
+            return customGoals;
+        }
         const others = ["大吉", "中吉", "小吉", "吉", "末吉"];
         return Array.from({ length: layout.pillarCount }, () =>
             others[Math.floor(Math.random() * others.length)]
         );
-    }, [resetCount]); // layout.pillarCount は定数のため依存配列から除外
+    }, [resetCount, customGoals]);
 
     // フェーズが result になった瞬間に最終結果をストアに保存
     // (ただし、スキップボタンなどですでに設定されている場合は上書きしない)

@@ -35,9 +35,9 @@
 - [x] OGP 画像（`public/og-image.png`）・`robots.txt`・`sitemap.xml`・SNS シェアボタン（結果を X / LINE / URL コピーでシェアできる導線）の実装
 
 ### Phase 3: パフォーマンス最適化 & 収益化実装
-- [ ] `public/sounds/*.wav`（合計 0.64MB）を `.mp3` / `.ogg` に変換して初回ロード軽量化
+- [x] `public/sounds/*.wav`（合計 0.64MB）を `.mp3` / `.ogg` に変換して初回ロード軽量化（実通信量 81〜96% 削減）
+- [x] 参加者名・景品名の自由入力＆URL共有機能（幹事向けカスタムあみだくじ機能）の実装
+- [x] 広告スロットコンポーネント（`AdSlot.tsx`）および Web Analytics / AdSense 環境変数対応の事前組み込み
 - [ ] 独自ドメイン取得（例: `cosmic-amida.com`）＆ Cloudflare Pages へのカスタムドメイン設定
-- [ ] Cloudflare Web Analytics（無料・Cookie レス）の導入
-- [ ] 収益化手段の実装（以下のいずれか・または組み合わせ）
-  - **広告**: 結果画面下部など誤タップを誘発しない位置へのバナー配置（AdSense / 忍者AdMax 等）
-  - **カスタム機能・課金**: 参加者名・景品名の自由入力＆URL共有機能（幹事向けツール化）、テーマ課金（Stripe + Cloudflare Workers）など
+- [ ] Cloudflare Web Analytics トークン発行・環境変数設定（`NEXT_PUBLIC_CF_BEACON_TOKEN`）
+- [ ] 広告審査申請（AdSense / 忍者AdMax 等）＆環境変数設定（`NEXT_PUBLIC_ADSENSE_CLIENT` / `NEXT_PUBLIC_ADSENSE_SLOT_RESULT`）による収益化稼働

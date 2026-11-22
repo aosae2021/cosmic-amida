@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Script from "next/script";
 import { Inter } from "next/font/google";
 import "./globals.css";
 import "../styles/layers.css";
@@ -10,6 +11,8 @@ const SITE_NAME = "Cosmic Amida";
 const SITE_TITLE = "Cosmic Amida | 宇宙を旅する3Dあみだくじ";
 const SITE_DESCRIPTION =
     "宇宙空間に浮かぶ運命の装置。太陽や地球、土星、衛星が巡る広大な宇宙を舞台に、光と音の演出で運勢を占う無料3Dあみだくじアプリ。";
+const CF_BEACON_TOKEN = process.env.NEXT_PUBLIC_CF_BEACON_TOKEN;
+const ADSENSE_CLIENT = process.env.NEXT_PUBLIC_ADSENSE_CLIENT;
 
 export const metadata: Metadata = {
     metadataBase: new URL(SITE_URL),
@@ -66,6 +69,24 @@ export default function RootLayout({
         <html lang="ja" suppressHydrationWarning>
             <body className={inter.className} suppressHydrationWarning>
                 {children}
+
+                {/* Cloudflare Web Analytics（環境変数 NEXT_PUBLIC_CF_BEACON_TOKEN 設定時に自動有効化） */}
+                {CF_BEACON_TOKEN && (
+                    <Script
+                        src="https://static.cloudflareinsights.com/beacon.min.js"
+                        data-cf-beacon={JSON.stringify({ token: CF_BEACON_TOKEN })}
+                        strategy="afterInteractive"
+                    />
+                )}
+
+                {/* Google AdSense（環境変数 NEXT_PUBLIC_ADSENSE_CLIENT 設定時に自動有効化） */}
+                {ADSENSE_CLIENT && (
+                    <Script
+                        src={`https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=${ADSENSE_CLIENT}`}
+                        crossOrigin="anonymous"
+                        strategy="afterInteractive"
+                    />
+                )}
             </body>
         </html>
     );

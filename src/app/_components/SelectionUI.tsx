@@ -19,17 +19,18 @@ const { layout } = AMIDA_CONFIG;
 export default function SelectionUI() {
     const phase = useGameStore((s) => s.phase);
     const selectPillar = useGameStore((s) => s.selectPillar);
+    const customParticipants = useGameStore((s) => s.customParticipants);
 
     if (phase !== "selecting") return null;
 
     const pillars = Array.from({ length: layout.pillarCount }, (_, i) => {
         const pos = pillarPositionOf(i);
-        return { ...pos, index: i };
+        return { ...pos, index: i, label: customParticipants?.[i] || String(i + 1) };
     });
 
     return (
         <>
-            {pillars.map(({ x, z, index }) => (
+            {pillars.map(({ x, z, index, label }) => (
                 <Html
                     key={index}
                     position={[x, layout.pillarHeight / 2 + 1.2 + layout.pillarHeight, z]}
@@ -38,14 +39,14 @@ export default function SelectionUI() {
                 >
                     <button
                         className="pillar-select-btn"
-                        aria-label={`${index + 1}番目の柱を選ぶ`}
+                        aria-label={`${label}の柱を選ぶ`}
                         onClick={() => {
                             soundManager.playSelect();
                             selectPillar(index);
                         }}
                     >
                         <span className="btn-arrow">▼</span>
-                        <span>{index + 1}</span>
+                        <span className="max-w-[96px] truncate">{label}</span>
                     </button>
                 </Html>
             ))}

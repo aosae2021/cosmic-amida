@@ -17,12 +17,16 @@ import { getRandomMessage } from "../../lib/fortuneMessages";
 import { AMIDA_CONFIG } from "../../lib/amidaConfig";
 import { motion } from "framer-motion";
 import { soundManager } from "../../lib/sound";
+import AdSlot from "./AdSlot";
 
 const SITE_URL = "https://cosmic-amida.pages.dev";
 
 export default function ResultOverlay() {
     const reset = useGameStore((s) => s.reset);
     const finalResult = useGameStore((s) => s.finalResult);
+    const selectedPillar = useGameStore((s) => s.selectedPillar);
+    const customTitle = useGameStore((s) => s.customTitle);
+    const customParticipants = useGameStore((s) => s.customParticipants);
     const messageRef = useRef(getRandomMessage());
     const [copied, setCopied] = useState(false);
     const { result } = AMIDA_CONFIG;
@@ -118,11 +122,19 @@ export default function ResultOverlay() {
     }, [result.confettiColors, result.confettiCount, finalResult]);
 
     const fortuneLabel = finalResult || "大吉";
+    const participantName =
+        selectedPillar !== null && customParticipants?.[selectedPillar]
+            ? customParticipants[selectedPillar]
+            : null;
     const shareUrl =
-        typeof window !== "undefined" && window.location.origin.startsWith("http")
-            ? window.location.origin
+        typeof window !== "undefined" && window.location.href.startsWith("http")
+            ? window.location.href
             : SITE_URL;
-    const shareText = `✨ Cosmic Amida で宇宙あみだくじを引いたら【${fortuneLabel}】でした！\n「${messageRef.current}」\n#CosmicAmida #宇宙あみだくじ`;
+    const shareText = customTitle || participantName
+        ? `✨ ${customTitle ? `「${customTitle}」` : "Cosmic Amida"} で${
+              participantName ? `${participantName}の結果は` : "あみだくじを引いたら"
+          }【${fortuneLabel}】でした！\n#CosmicAmida #宇宙あみだくじ`
+        : `✨ Cosmic Amida で宇宙あみだくじを引いたら【${fortuneLabel}】でした！\n「${messageRef.current}」\n#CosmicAmida #宇宙あみだくじ`;
 
     const handleShareX = () => {
         const intentUrl = `https://twitter.com/intent/tweet?text=${encodeURIComponent(
@@ -234,6 +246,13 @@ export default function ResultOverlay() {
                 {/* Cosmic Shockwave */}
                 <div className="shockwave"></div>
 
+                {(customTitle || participantName) && (
+                    <p className="mb-1 rounded-full border border-blue-300/40 bg-slate-950/60 px-4 py-1 text-sm font-bold text-blue-200">
+                        {customTitle ? `${customTitle}：` : ""}
+                        {participantName ? `${participantName} の結果` : "結果発表"}
+                    </p>
+                )}
+
                 <div className="daikichi-wrapper">
                     <h1 className="daikichi-text" aria-live="polite">
                         {fortuneLabel}
@@ -301,6 +320,9 @@ export default function ResultOverlay() {
                         🔄 もう一度
                     </button>
                 </div>
+
+                {/* 広告スロット（誤タップ防止のためボタン群の下に十分な余白を取って配置） */}
+                <AdSlot className="mt-8" />
             </motion.div>
         </div>
     );

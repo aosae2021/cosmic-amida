@@ -44,6 +44,10 @@ interface GameState {
     chargeProgress: number;
     /** ポーズ中かどうか */
     isPaused: boolean;
+    /** カスタムあみだ設定（未設定時は null＝デフォルトのおみくじモード） */
+    customTitle: string | null;
+    customParticipants: string[] | null;
+    customGoals: string[] | null;
     // ─── Actions ───
     selectPillar: (index: number) => void;
     setPhase: (phase: GamePhase) => void;
@@ -54,7 +58,13 @@ interface GameState {
     setChargeProgress: (progress: number) => void;
     setChargeComplete: (complete: boolean) => void;
     togglePause: () => void;
-    /** リセット: resetCount++ + フェーズを 'selecting' に戻す */
+    setCustomConfig: (config: {
+        title?: string | null;
+        participants: string[] | null;
+        goals: string[] | null;
+    }) => void;
+    clearCustomConfig: () => void;
+    /** リセット: resetCount++ + フェーズを 'selecting' に戻す（カスタム設定は保持） */
     reset: () => void;
 }
 
@@ -69,6 +79,9 @@ export const useGameStore = create<GameState>((set) => ({
     chargeProgress: 0,
     isChargeComplete: false,
     isPaused: false,
+    customTitle: null,
+    customParticipants: null,
+    customGoals: null,
     selectPillar: (index) =>
         set({ selectedPillar: index, phase: "transitioning" }),
 
@@ -83,6 +96,18 @@ export const useGameStore = create<GameState>((set) => ({
     setChargeProgress: (chargeProgress) => set({ chargeProgress }),
     setChargeComplete: (isChargeComplete) => set({ isChargeComplete }),
     togglePause: () => set((state) => ({ isPaused: !state.isPaused })),
+    setCustomConfig: ({ title = null, participants, goals }) =>
+        set({
+            customTitle: title,
+            customParticipants: participants,
+            customGoals: goals,
+        }),
+    clearCustomConfig: () =>
+        set({
+            customTitle: null,
+            customParticipants: null,
+            customGoals: null,
+        }),
 
     reset: () =>
         set((state) => ({

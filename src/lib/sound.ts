@@ -36,24 +36,24 @@ class SoundManager {
         this.isInitialized = true;
 
         this.bgm = new Howl({
-            src: ["/sounds/bgm.wav"],
+            src: ["/sounds/bgm.ogg", "/sounds/bgm.mp3"],
             loop: true,
             volume: this._volume * 0.5,
             autoplay: false,
         });
 
         this.selectSE = new Howl({
-            src: ["/sounds/select.wav"],
+            src: ["/sounds/select.ogg", "/sounds/select.mp3"],
             volume: this._volume,
         });
 
         this.sparkleSE = new Howl({
-            src: ["/sounds/sparkle.wav"],
+            src: ["/sounds/sparkle.ogg", "/sounds/sparkle.mp3"],
             volume: this._volume * 0.7,
         });
 
         this.resultSE = new Howl({
-            src: ["/sounds/result.wav"],
+            src: ["/sounds/result.ogg", "/sounds/result.mp3"],
             volume: this._volume,
         });
     }

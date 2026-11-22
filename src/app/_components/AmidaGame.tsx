@@ -19,6 +19,8 @@ import AmidaScene from "./AmidaScene";
 import ResultOverlay from "./ResultOverlay";
 import CountdownOverlay from "./CountdownOverlay";
 import VolumeSlider from "./VolumeSlider";
+import CustomAmidaModal from "./CustomAmidaModal";
+import { parseCustomAmidaFromSearch } from "../../lib/customAmida";
 
 /** WebGL が利用可能かどうかを判定する */
 function isWebGLAvailable(): boolean {
@@ -62,7 +64,11 @@ function WebGLFallback() {
 export default function AmidaGame() {
     const phase = useGameStore((s) => s.phase);
     const resetCount = useGameStore((s) => s.resetCount);
+    const customTitle = useGameStore((s) => s.customTitle);
+    const customGoals = useGameStore((s) => s.customGoals);
+    const setCustomConfig = useGameStore((s) => s.setCustomConfig);
     const reducedMotion = useReducedMotion();
+    const [customModalOpen, setCustomModalOpen] = useState(false);
 
     // WebGL 対応チェック（クライアントサイドのみ）
     const [webglSupported, setWebglSupported] = useState(true);
@@ -77,9 +83,15 @@ export default function AmidaGame() {
         setConfig(getDeviceConfig(AMIDA_CONFIG));
     }, []);
     useEffect(() => {
-        const params = new URLSearchParams(typeof window !== "undefined" ? window.location.search : "");
+        const search = typeof window !== "undefined" ? window.location.search : "";
+        const params = new URLSearchParams(search);
         setIphoneTestMode(params.get("device") === "iphone");
-    }, []);
+
+        const parsed = parseCustomAmidaFromSearch(search);
+        if (parsed) {
+            setCustomConfig(parsed);
+        }
+    }, [setCustomConfig]);
 
     // devicePixelRatio 制御（モバイルまたはiPhoneテストモードでは dpr を制限）
     const dpr: [number, number] = isMobileDevice() || iphoneTestMode ? [1, 1.5] : [1, 2];
@@ -103,8 +115,9 @@ export default function AmidaGame() {
 
     // スキップボタンのハンドラー
     const handleSkip = () => {
-        // 50%の確率で「大吉」または「小吉」を強制的に決定
-        const forcedResult = Math.random() < 0.5 ? "大吉" : "小吉";
+        const pool =
+            customGoals && customGoals.length > 0 ? customGoals : ["大吉", "小吉"];
+        const forcedResult = pool[Math.floor(Math.random() * pool.length)];
         useGameStore.getState().setFinalResult(forcedResult);
         useGameStore.getState().setPhase("result");
     };
@@ -170,7 +183,7 @@ export default function AmidaGame() {
                             margin: 0,
                         }}
                     >
-                        柱を選んでください
+                        {customTitle ? `${customTitle} — 柱を選んでください` : "柱を選んでください"}
                     </p>
                     <div
                         style={{
@@ -237,6 +250,26 @@ export default function AmidaGame() {
                 >
                     スキップ ⏭️
                 </button>
+            )}
+
+            {/* カスタム設定ボタン（選択フェーズのみ右上表示） */}
+            {phase === "selecting" && (
+                <button
+                    type="button"
+                    onClick={() => setCustomModalOpen(true)}
+                    aria-label="カスタムあみだくじを設定する"
+                    className="absolute top-5 right-5 z-[1000] rounded-lg border border-blue-300/45 bg-slate-950/65 px-3.5 py-2 text-sm font-bold text-blue-100 backdrop-blur-md transition-all hover:scale-105 hover:bg-blue-900/60 shadow-lg"
+                >
+                    ⚙️ {customGoals ? "カスタム中" : "カスタム"}
+                </button>
+            )}
+
+            {/* カスタムあみだくじ設定モーダル */}
+            {customModalOpen && (
+                <CustomAmidaModal
+                    isOpen={customModalOpen}
+                    onClose={() => setCustomModalOpen(false)}
+                />
             )}
         </>
     );

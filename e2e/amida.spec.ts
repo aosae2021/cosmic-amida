@@ -63,4 +63,19 @@ test.describe("Cosmic Amida E2E", () => {
             page.getByRole("heading", { name: "プライバシーポリシー", exact: true })
         ).toBeVisible();
     });
+
+    test("URLクエリからカスタムあみだくじ設定が復元され、モーダルも開閉できる", async ({
+        page,
+    }) => {
+        await page.goto("/?t=ランチ決め&p=A,B,C,D,E&g=ラーメン,カレー,寿司,パスタ,定食");
+        await expect(page.getByText("ランチ決め — 柱を選んでください")).toBeVisible({
+            timeout: 15000,
+        });
+
+        await page.getByRole("button", { name: "カスタムあみだくじを設定する" }).click();
+        await expect(
+            page.getByRole("heading", { name: /カスタムあみだくじ/ })
+        ).toBeVisible();
+        await page.getByRole("button", { name: "閉じる" }).click();
+    });
 });
