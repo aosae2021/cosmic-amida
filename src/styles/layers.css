@@ -1,0 +1,12 @@
+/* z-index レイヤー管理（一元管理）
+ * ────────────────────────────────
+ * --z-3d-html : drei <Html> ボタン
+ * --z-flash   : ホワイトフラッシュ
+ * --z-result  : 結果画面
+ */
+:root {
+  --z-3d-html: 100;
+  --z-countdown: 150;
+  --z-flash: 200;
+  --z-result: 300;
+}
