@@ -1,17 +1,15 @@
 /**
- * メインあみだ画面（Fortune Flow 3D）の E2E テスト
+ * メインあみだ画面（Cosmic Amida）および情報ページの E2E テスト
  *
- * - トップページが表示され、選択フェーズの案内が出ること
+ * - トップページが表示され、選択フェーズの案内とナビゲーションが出ること
  * - 致命的なコンソールエラーがないこと
- * - スキップボタンで結果まで遷移できること（動作確認）
- *
- * 実行: 開発サーバー起動後 `npm run test:e2e` または
- *       `PLAYWRIGHT_BASE_URL=http://localhost:3000 npx playwright test e2e/amida.spec.ts`
+ * - スキップボタンで結果まで遷移し、SNSシェアボタンと「もう一度」ボタンが表示されること
+ * - /about（遊び方・FAQ）および /privacy（プライバシーポリシー）が正常に表示されること
  */
 import { test, expect } from "@playwright/test";
 
-test.describe("メインあみだ画面 (Fortune Flow 3D)", () => {
-    test("トップページが表示され選択案内が出る", async ({ page }) => {
+test.describe("Cosmic Amida E2E", () => {
+    test("トップページが表示され選択案内とナビゲーションが出る", async ({ page }) => {
         const consoleErrors: string[] = [];
         page.on("console", (msg) => {
             if (msg.type() === "error") consoleErrors.push(msg.text());
@@ -22,6 +20,9 @@ test.describe("メインあみだ画面 (Fortune Flow 3D)", () => {
             page.getByText("柱を選んでください", { exact: true })
         ).toBeVisible({ timeout: 15000 });
 
+        await expect(page.getByRole("link", { name: "遊び方・FAQ" })).toBeVisible();
+        await expect(page.getByRole("link", { name: "プライバシーポリシー" })).toBeVisible();
+
         const fatal = consoleErrors.filter(
             (t) =>
                 t.includes("FATAL") ||
@@ -31,7 +32,7 @@ test.describe("メインあみだ画面 (Fortune Flow 3D)", () => {
         expect(fatal, "致命的なコンソールエラーがないこと").toHaveLength(0);
     });
 
-    test("スキップで結果画面まで遷移し、もう一度ボタンが表示される", async ({
+    test("スキップで結果画面まで遷移し、シェアボタンともう一度ボタンが表示される", async ({
         page,
     }) => {
         await page.goto("/");
@@ -43,5 +44,23 @@ test.describe("メインあみだ画面 (Fortune Flow 3D)", () => {
         await expect(
             page.getByRole("button", { name: /もう一度/ })
         ).toBeVisible({ timeout: 8000 });
+        await expect(
+            page.getByRole("button", { name: /X（旧Twitter）で結果をシェアする/ })
+        ).toBeEnabled();
+        await expect(
+            page.getByRole("button", { name: /LINEで結果をシェアする/ })
+        ).toBeEnabled();
+    });
+
+    test("遊び方・FAQページとプライバシーポリシーページが表示される", async ({ page }) => {
+        await page.goto("/about");
+        await expect(
+            page.getByRole("heading", { name: /Cosmic Amida について・遊び方/ })
+        ).toBeVisible();
+
+        await page.goto("/privacy");
+        await expect(
+            page.getByRole("heading", { name: "プライバシーポリシー", exact: true })
+        ).toBeVisible();
     });
 });

@@ -18,21 +18,21 @@
 ## 次にやることリスト
 
 ### Phase 1: 動作確認 & リリース（Cloudflare Pages 無料公開）
-- [ ] ローカルで `npm run dev` を起動し、3D シーン（太陽・地球・月・土星・ISS・衛星・彗星）の表示とあみだくじ一連の動作を目視確認
-- [ ] GitHub に新規リポジトリ `cosmic-amida` を作成し、`main` ブランチを push
-- [ ] Cloudflare Pages にリポジトリを連携して初回デプロイ
+- [x] ローカルで `npm run dev` を起動し、3D シーン（太陽・地球・月・土星・ISS・衛星・彗星）の表示とあみだくじ一連の動作を目視確認（コンソール・ページ・ネットワークエラー 0 件）
+- [x] GitHub に新規リポジトリ `cosmic-amida`（`https://github.com/aosae2021/cosmic-amida`）を作成し、`main` ブランチを push
+- [x] Cloudflare Pages（`cosmic-amida`）へ静的出力 `out/` を初回デプロイ・公開（`https://cosmic-amida.pages.dev`）
   - **Framework preset**: `Next.js (Static HTML Export)`
   - **Build command**: `npm run build`
   - **Build output directory**: `out`
   - **環境変数**: `NODE_VERSION=22`
-- [ ] 公開 URL（`*.pages.dev`）でスマホ実機＆PC 表示確認
+- [ ] 公開 URL（`https://cosmic-amida.pages.dev`）でスマホ実機表示確認（※PC ヘッドレスブラウザでの本番確認は完了）
 
 ### Phase 2: マネタイズ・審査通過のためのページ整備
-- [ ] **プライバシーポリシー**ページ（`/privacy`）の作成（広告・アクセス解析対応）
-- [ ] **遊び方・FAQ・運営情報（お問い合わせ）**ページ（`/about` またはトップ下部の展開セクション）の作成
+- [x] **プライバシーポリシー**ページ（`/privacy`）の作成（広告・アクセス解析・免責事項対応）
+- [x] **遊び方・FAQ・運営情報（お問い合わせ）**ページ（`/about`）およびトップ画面からの常設ナビゲーション作成
   - ※ 全画面 3D Canvas だけだと Google AdSense 等の審査で「有用性の低いコンテンツ」になりやすいため必須
-- [ ] 残存アセット（`public/models/acrimsat.glb`, `textures/`, `sounds/*.wav`）のライセンス確認・必要に応じたクレジット表記または差し替え
-- [ ] OGP 画像・SNS シェアボタン（結果を X / LINE でシェアできる導線）の実装
+- [x] 残存アセット（`public/models/acrimsat.glb`, `textures/`, `sounds/*.wav`）のライセンス確認・`/about` へのクレジット表記
+- [x] OGP 画像（`public/og-image.png`）・`robots.txt`・`sitemap.xml`・SNS シェアボタン（結果を X / LINE / URL コピーでシェアできる導線）の実装
 
 ### Phase 3: パフォーマンス最適化 & 収益化実装
 - [ ] `public/sounds/*.wav`（合計 0.64MB）を `.mp3` / `.ogg` に変換して初回ロード軽量化
