@@ -87,8 +87,9 @@ test.describe("Cosmic Amida E2E", () => {
             page.getByRole("heading", { name: /宇宙割り勘あみだくじ/ })
         ).toBeVisible();
 
-        // 合計20000円・最大上限6000円を指定して連打スキップで柱選択へ
+        // 合計20000円・最大上限「設定あり」→6000円を指定して連打スキップで柱選択へ
         await page.fill("#warikan-total", "20000");
+        await page.getByRole("button", { name: "設定あり" }).click();
         await page.fill("#warikan-max", "6000");
         await page.getByRole("button", { name: /連打をスキップしてすぐ柱を選ぶ/ }).click();
 

@@ -31,7 +31,8 @@ export default function WarikanApp() {
     // ─── Setup State ───
     const [memberCount, setMemberCount] = useState<number>(4);
     const [totalAmountStr, setTotalAmountStr] = useState<string>("20000");
-    const [maxAmountStr, setMaxAmountStr] = useState<string>("");
+    const [useMaxCap, setUseMaxCap] = useState<boolean>(false);
+    const [maxAmountStr, setMaxAmountStr] = useState<string>("8000");
     const [pattern, setPattern] = useState<WarikanPattern>("one_free");
     const [rangePercent, setRangePercent] = useState<number>(30);
     const [memberNames, setMemberNames] = useState<string[]>([
@@ -71,12 +72,18 @@ export default function WarikanApp() {
     const revealRafRef = useRef<number | null>(null);
 
     const totalAmount = Math.max(0, parseInt(totalAmountStr.replace(/[^\d]/g, ""), 10) || 0);
-    const parsedMax = maxAmountStr.trim()
-        ? parseInt(maxAmountStr.replace(/[^\d]/g, ""), 10)
-        : null;
-    const maxPerPerson = parsedMax !== null && !Number.isNaN(parsedMax) && parsedMax > 0 ? parsedMax : null;
+    const parsedMax =
+        useMaxCap && maxAmountStr.trim()
+            ? parseInt(maxAmountStr.replace(/[^\d]/g, ""), 10)
+            : null;
+    const maxPerPerson =
+        useMaxCap && parsedMax !== null && !Number.isNaN(parsedMax) && parsedMax > 0
+            ? parsedMax
+            : null;
     const minRequiredCap = memberCount > 0 ? Math.ceil(totalAmount / memberCount) : 0;
-    const isMaxTooLow = maxPerPerson !== null && maxPerPerson * memberCount < totalAmount;
+    const isMaxTooLow =
+        useMaxCap &&
+        (maxPerPerson === null || maxPerPerson * memberCount < totalAmount);
 
     const activeNames = useMemo(
         () =>
@@ -417,33 +424,88 @@ export default function WarikanApp() {
                                 </div>
                             </div>
 
-                            <div className="space-y-1.5">
-                                <label htmlFor="warikan-max" className="text-xs font-bold text-amber-300">
-                                    1人あたり最大金額（任意・上限）
-                                </label>
-                                <input
-                                    id="warikan-max"
-                                    type="number"
-                                    min={0}
-                                    step={500}
-                                    value={maxAmountStr}
-                                    onChange={(e) => setMaxAmountStr(e.target.value)}
-                                    placeholder="空欄なら上限なし"
-                                    className="w-full rounded-xl border border-amber-300/30 bg-slate-900/80 px-3.5 py-2.5 text-lg font-extrabold text-white placeholder-slate-500 focus:border-amber-400 focus:outline-none"
-                                />
-                                <p className="text-[11px] text-slate-400">
-                                    均等平均: ¥{minRequiredCap.toLocaleString()} / 人
-                                </p>
-                                {isMaxTooLow && (
-                                    <div className="flex items-center justify-between gap-2 rounded-lg border border-rose-400/50 bg-rose-950/60 px-2.5 py-1.5 text-[11px] text-rose-200">
-                                        <span>最低 ¥{minRequiredCap.toLocaleString()} 以上必要です</span>
+                            <div className="space-y-2">
+                                <div className="flex items-center justify-between gap-2">
+                                    <span className="text-xs font-bold text-amber-300">
+                                        1人あたり最大金額
+                                    </span>
+                                    <div className="inline-flex rounded-lg border border-amber-300/30 bg-slate-900/90 p-0.5 text-[11px] font-bold">
                                         <button
                                             type="button"
-                                            onClick={() => setMaxAmountStr(String(minRequiredCap))}
-                                            className="underline font-bold text-white shrink-0"
+                                            onClick={() => setUseMaxCap(false)}
+                                            aria-pressed={!useMaxCap}
+                                            className={`rounded-md px-2.5 py-1 transition-colors ${
+                                                !useMaxCap
+                                                    ? "bg-slate-700 text-white"
+                                                    : "text-slate-400 hover:text-white"
+                                            }`}
                                         >
-                                            自動調整
+                                            設定なし
                                         </button>
+                                        <button
+                                            type="button"
+                                            onClick={() => {
+                                                setUseMaxCap(true);
+                                                if (!maxAmountStr.trim() || (parseInt(maxAmountStr, 10) || 0) < minRequiredCap) {
+                                                    const suggested = Math.ceil((minRequiredCap * 1.4) / 500) * 500;
+                                                    setMaxAmountStr(String(Math.max(minRequiredCap, suggested)));
+                                                }
+                                            }}
+                                            aria-pressed={useMaxCap}
+                                            className={`rounded-md px-2.5 py-1 transition-colors ${
+                                                useMaxCap
+                                                    ? "bg-amber-400 text-slate-950"
+                                                    : "text-slate-400 hover:text-white"
+                                            }`}
+                                        >
+                                            設定あり
+                                        </button>
+                                    </div>
+                                </div>
+
+                                {useMaxCap ? (
+                                    <div className="space-y-1.5">
+                                        <input
+                                            id="warikan-max"
+                                            type="number"
+                                            min={minRequiredCap}
+                                            step={500}
+                                            value={maxAmountStr}
+                                            onChange={(e) => setMaxAmountStr(e.target.value)}
+                                            aria-label="1人あたり最大金額（円）"
+                                            className="w-full rounded-xl border border-amber-300/40 bg-slate-900/80 px-3.5 py-2.5 text-lg font-extrabold text-white focus:border-amber-400 focus:outline-none"
+                                        />
+                                        <div className="flex flex-wrap gap-1.5">
+                                            {[1000, 2000, 3000].map((plus) => {
+                                                const v = Math.ceil((minRequiredCap + plus) / 100) * 100;
+                                                return (
+                                                    <button
+                                                        key={plus}
+                                                        type="button"
+                                                        onClick={() => setMaxAmountStr(String(v))}
+                                                        className="rounded-md border border-amber-300/25 bg-amber-950/40 px-2 py-0.5 text-[11px] text-amber-200 hover:bg-amber-900/50"
+                                                    >
+                                                        平均+{plus.toLocaleString()} (¥{v.toLocaleString()})
+                                                    </button>
+                                                );
+                                            })}
+                                        </div>
+                                        {isMaxTooLow && (
+                                            <div className="flex items-center justify-between gap-2 rounded-lg border border-rose-400/50 bg-rose-950/60 px-2.5 py-1.5 text-[11px] text-rose-200">
+                                                <span>最低 ¥{minRequiredCap.toLocaleString()} 以上必要です</span>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => setMaxAmountStr(String(minRequiredCap))}
+                                                    className="underline font-bold text-white shrink-0"
+                                                >
+                                                    自動調整
+                                                </button>
+                                            </div>
+                                        )}
+                                    </div>
+                                ) : (
+                                    <div className="rounded-xl border border-slate-700/70 bg-slate-900/50 px-3.5 py-3 text-xs text-slate-400">
+                                        上限なし（均等平均: ¥{minRequiredCap.toLocaleString()} / 人）
                                     </div>
                                 )}
                             </div>
