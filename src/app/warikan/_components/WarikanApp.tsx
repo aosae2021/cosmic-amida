@@ -305,15 +305,15 @@ export default function WarikanApp() {
         const start = performance.now();
         let sweepPlayed = false;
         let holdSoundPlayed = false;
+        let dropStarted = false;
         setRevealPhase("lockon");
-        setTraceProgress(0);
+        setTraceProgress(0.005);
         soundManager.playPon();
 
         const tick = (now: number) => {
             const elapsed = now - start;
             if (elapsed < lockonMs) {
-                setRevealPhase("lockon");
-                setTraceProgress(0.005);
+                // lockon 中は state を再セットせず軽量に待機
                 revealRafRef.current = requestAnimationFrame(tick);
             } else if (elapsed < lockonMs + descentMs) {
                 if (!sweepPlayed) {
@@ -325,15 +325,18 @@ export default function WarikanApp() {
                 setTraceProgress(Math.max(0.01, p * 0.88));
                 revealRafRef.current = requestAnimationFrame(tick);
             } else if (elapsed < lockonMs + descentMs + holdMs) {
-                setTraceProgress(0.88);
                 if (!holdSoundPlayed) {
                     holdSoundPlayed = true;
+                    setTraceProgress(0.88);
                     setRevealPhase("feint");
                     soundManager.playTensionHold();
                 }
                 revealRafRef.current = requestAnimationFrame(tick);
             } else if (elapsed < totalMs) {
-                setRevealPhase("descending");
+                if (!dropStarted) {
+                    dropStarted = true;
+                    setRevealPhase("descending");
+                }
                 const dropT = (elapsed - lockonMs - descentMs - holdMs) / dropMs;
                 setTraceProgress(0.88 + dropT * 0.12);
                 revealRafRef.current = requestAnimationFrame(tick);

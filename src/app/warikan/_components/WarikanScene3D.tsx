@@ -489,12 +489,13 @@ export default function WarikanScene3D(props: WarikanScene3DProps) {
 
                 <LadderMeshes {...props} />
 
-                {/* Bloom グロウ（火花・軌跡・光の玉が宇宙空間で眩しく光る） */}
-                <EffectComposer>
+                {/* Bloom グロウ（resolutionScale=0.5 でスマホ＆PCとも軽快に60fps維持） */}
+                <EffectComposer multisampling={0}>
                     <Bloom
-                        intensity={0.45}
+                        intensity={0.42}
                         luminanceThreshold={1.2}
                         luminanceSmoothing={0.15}
+                        resolutionScale={0.5}
                         mipmapBlur
                     />
                     <Vignette eskil={false} offset={0.15} darkness={0.85} />
