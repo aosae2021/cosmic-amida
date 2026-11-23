@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import Link from "next/link";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion } from "framer-motion";
 import confetti from "canvas-confetti";
 import {
     applyRoundUpToFund,
@@ -956,7 +956,7 @@ export default function WarikanApp() {
                             initial={{ opacity: 0, y: -12 }}
                             animate={{ opacity: 1, y: 0 }}
                             transition={{ duration: 0.4, ease: [0.22, 1, 0.36, 1] }}
-                            className="fixed top-14 left-1/2 -translate-x-1/2 z-30 w-[94%] max-w-xl rounded-2xl border border-blue-300/40 bg-slate-950/75 px-4 py-2.5 backdrop-blur-md shadow-xl flex flex-wrap items-center justify-between gap-2"
+                            className="fixed top-14 left-1/2 -translate-x-1/2 z-[200] w-[94%] max-w-xl rounded-2xl border border-blue-300/40 bg-slate-950/75 px-4 py-2.5 backdrop-blur-md shadow-xl flex flex-wrap items-center justify-between gap-2"
                         >
                             <div>
                                 <p className="text-[11px] font-bold text-blue-300">
@@ -980,7 +980,7 @@ export default function WarikanApp() {
                             initial={{ opacity: 0, y: 18 }}
                             animate={{ opacity: 1, y: 0 }}
                             transition={{ duration: 0.4, ease: [0.22, 1, 0.36, 1] }}
-                            className="fixed bottom-4 left-1/2 -translate-x-1/2 z-30 w-[95%] max-w-2xl rounded-2xl border border-blue-300/35 bg-slate-950/80 p-3 backdrop-blur-md shadow-2xl"
+                            className="fixed bottom-4 left-1/2 -translate-x-1/2 z-[200] w-[95%] max-w-2xl rounded-2xl border border-blue-300/35 bg-slate-950/80 p-3 backdrop-blur-md shadow-2xl"
                         >
                             <div
                                 className="grid gap-1.5"
@@ -1019,7 +1019,7 @@ export default function WarikanApp() {
 
                 {/* ─── STEP 4: 4幕ドラマティック 3D 火花降下＆結果発表 ─── */}
                 {stage === "reveal" && finalResults[revealIdx] && (
-                    <AnimatePresence mode="wait">
+                    <>
                         {revealPhase !== "landed" ? (
                             <div key="descending-hud">
                                 <motion.div
@@ -1027,7 +1027,7 @@ export default function WarikanApp() {
                                     initial={{ opacity: 0, y: -14, scale: 0.92 }}
                                     animate={{ opacity: 1, y: 0, scale: 1 }}
                                     transition={{ duration: 0.45, ease: [0.34, 1.45, 0.64, 1] }}
-                                    className="fixed top-16 left-1/2 -translate-x-1/2 z-30 w-[92%] max-w-md rounded-full border border-amber-300/60 bg-slate-950/75 px-5 py-2.5 text-center backdrop-blur-md shadow-xl"
+                                    className="fixed top-16 left-1/2 -translate-x-1/2 z-[200] w-[92%] max-w-md rounded-full border border-amber-300/60 bg-slate-950/75 px-5 py-2.5 text-center backdrop-blur-md shadow-xl"
                                 >
                                     {revealPhase === "lockon" ? (
                                         <p className="text-sm sm:text-base font-black text-blue-200">
@@ -1044,11 +1044,11 @@ export default function WarikanApp() {
                                     )}
                                 </motion.div>
 
-                                <div className="fixed bottom-5 left-1/2 -translate-x-1/2 z-30">
+                                <div className="fixed bottom-5 left-1/2 -translate-x-1/2 z-[200]">
                                     <button
                                         type="button"
                                         onClick={handleSkipToSummary}
-                                        className="hover-spring rounded-full border border-slate-400/60 bg-slate-950/80 px-5 py-2 text-xs font-bold text-slate-200 backdrop-blur-md hover:bg-slate-800 shadow-lg"
+                                        className="rounded-full border border-slate-400/60 bg-slate-950/85 px-5 py-2 text-xs font-bold text-slate-200 backdrop-blur-md hover:bg-slate-800 shadow-lg"
                                     >
                                         ⏭️ 全員の結果を一気に見る
                                     </button>
@@ -1061,7 +1061,7 @@ export default function WarikanApp() {
                                 initial={{ opacity: 0, y: 28, filter: "blur(3px)" }}
                                 animate={{ opacity: 1, y: 0, filter: "blur(0px)" }}
                                 transition={{ duration: 0.4, ease: [0.22, 1, 0.36, 1] }}
-                                className="fixed bottom-5 left-1/2 -translate-x-1/2 z-30 w-[92%] max-w-md rounded-2xl border border-amber-300/60 bg-slate-950/88 p-5 backdrop-blur-md shadow-[0_0_50px_rgba(251,191,36,0.35)] text-center space-y-3"
+                                className="fixed bottom-5 left-1/2 -translate-x-1/2 z-[200] w-[92%] max-w-md rounded-2xl border border-amber-300/60 bg-slate-950/88 p-5 backdrop-blur-md shadow-[0_0_50px_rgba(251,191,36,0.35)] text-center space-y-3"
                             >
                                 <p className="text-xs font-bold tracking-widest text-blue-300">
                                     宇宙運命判定（{revealIdx + 1} / {finalResults.length}）
@@ -1116,7 +1116,7 @@ export default function WarikanApp() {
                                 </div>
                             </motion.section>
                         )}
-                    </AnimatePresence>
+                    </>
                 )}
 
                 {/* ─── STEP 5: 精算結果ボード & シェア ─── */}

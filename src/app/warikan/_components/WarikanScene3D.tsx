@@ -340,9 +340,15 @@ function LadderMeshes({
                         />
 
                         {/* 上端：誰がどこを選んでいるか（未選択は柱番号、選択済みは名前が光る） */}
-                        <Html position={[0, PILLAR_HEIGHT / 2 + 0.85, 0]} center zIndexRange={[20, 10]}>
+                        <Html
+                            position={[0, PILLAR_HEIGHT / 2 + 0.85, 0]}
+                            center
+                            zIndexRange={[20, 10]}
+                            style={{ pointerEvents: "none" }}
+                        >
                             <div
                                 style={{
+                                    pointerEvents: "none",
                                     background: isActive
                                         ? "linear-gradient(135deg, #fde047, #f97316)"
                                         : topName
@@ -372,9 +378,15 @@ function LadderMeshes({
 
                         {/* 下端：一番下の選択肢（金額がスタート時から確認可能／到達時は黄金ハイライト） */}
                         {goalAmounts.length === ladder.memberCount && (
-                            <Html position={[0, -PILLAR_HEIGHT / 2 - 0.9, 0]} center zIndexRange={[20, 10]}>
+                            <Html
+                                position={[0, -PILLAR_HEIGHT / 2 - 0.9, 0]}
+                                center
+                                zIndexRange={[20, 10]}
+                                style={{ pointerEvents: "none" }}
+                            >
                                 <div
                                     style={{
+                                        pointerEvents: "none",
                                         background: isGoalRevealed
                                             ? goalAmt === 0
                                                 ? "linear-gradient(135deg, #10b981, #059669)"
