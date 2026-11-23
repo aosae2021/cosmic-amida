@@ -8,9 +8,11 @@
         "build": "next build",
         "start": "next start",
         "lint": "next lint",
+        "typecheck": "tsc --noEmit",
         "test": "vitest run",
         "test:watch": "vitest",
-        "test:e2e": "playwright test"
+        "test:e2e": "playwright test",
+        "deploy": "npx wrangler pages deploy out --project-name=cosmic-amida --branch=main"
     },
     "dependencies": {
         "@react-three/drei": "^10.7.7",

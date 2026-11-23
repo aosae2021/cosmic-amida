@@ -144,10 +144,7 @@ export default function AboutPage() {
                     <div className="rounded-2xl border border-slate-700/60 bg-slate-900/50 p-5 space-y-3 text-sm leading-relaxed text-slate-300">
                         <ul className="list-disc pl-5 space-y-2">
                             <li>
-                                <strong>人工衛星 3D モデル（ACRIMSAT）</strong>: NASA 3D Resources（Public Domain / 米国政府著作物）を使用しています。
-                            </li>
-                            <li>
-                                <strong>天体・宇宙表現</strong>: 太陽・土星などのサーフェステクスチャおよび GLSL シェーダー・Canvas によるプロシージャル生成を組み合わせて描画しています。
+                                <strong>宇宙オブジェクト・天体表現</strong>: 太陽・土星などのサーフェステクスチャおよび Three.js / GLSL シェーダー・Canvas によるプロシージャル 3D モデル・パーティクルを組み合わせて描画しています。
                             </li>
                             <li>
                                 <strong>効果音・サウンド</strong>: Web Audio API によるプロシージャル音響合成とオリジナル／ロイヤリティフリー音源を使用しています。

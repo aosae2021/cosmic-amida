@@ -26,10 +26,11 @@ npm run dev
 | コマンド | 説明 |
 |---|---|
 | `npm run dev` | ローカル開発サーバー起動 |
+| `npm run typecheck` | TypeScript 型チェック（`tsc --noEmit`） |
 | `npm run test` | Vitest ユニットテスト実行（ロジック・ストア検証） |
 | `npm run build` | 本番用静的ビルド（`out/` へ出力） |
 | `npm run test:e2e` | Playwright E2E テスト実行（`PLAYWRIGHT_BASE_URL` で本番 URL 指定可） |
-| `npx wrangler pages deploy out --project-name=cosmic-amida --branch=main` | Cloudflare Pages へ `out/` をデプロイ |
+| `npm run deploy` | Cloudflare Pages へ `out/` をデプロイ |
 
 ## 環境変数（任意・オプトイン）
 
@@ -54,4 +55,4 @@ npm run dev
 全体構成図（Mermaid）・主要な設計判断（ADR）・壊してはいけない制約は以下を参照してください。
 
 - **アーキテクチャ・関係図・ADR**: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)
-- **今後のロードマップ・残タスク**: [NEXT_STEPS.md](NEXT_STEPS.md)
+- **今後のロードマップ・残タスク**: [docs/NEXT_STEPS.md](docs/NEXT_STEPS.md)

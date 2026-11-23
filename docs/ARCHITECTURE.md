@@ -85,8 +85,10 @@ flowchart LR
 | `src/app/warikan/_components/` | 宇宙割り勘モード専用の UI フロー（`WarikanApp.tsx`）と 3D シーン（`WarikanScene3D.tsx`） |
 | `src/hooks/` | Zustand ストア（`useGameStore.ts`）、おみだ経路計算（`useAmidaLogic.ts`）、Reduced Motion 検知 |
 | `src/lib/` | UI 非依存の純粋ロジック（`warikanLogic.ts`, `customAmida.ts`, `amidaConfig.ts`, `fortuneMessages.ts`）と音響制御（`sound.ts`, `soundSynthesis.ts`） |
-| `public/` | 静的アセット（NASA ACRIMSAT `.glb`, 惑星テクスチャ, `.ogg`/`.mp3` 音声, `og-image.png`, `robots.txt`, `sitemap.xml`） |
+| `public/` | 静的アセット（惑星・太陽テクスチャ, `.ogg`/`.mp3` 音声, `og-image.png`, `robots.txt`, `sitemap.xml`） |
+| `docs/` | 設計地図・ADR（`ARCHITECTURE.md`）およびロードマップ（`NEXT_STEPS.md`） |
 | `e2e/` | Playwright E2E テスト（ローカルおよび本番 URL 検証用） |
+| `archive/` | 未使用コンポーネント・モデルの退避先（`tsconfig.json` / `vitest.config.ts` でビルド・テスト対象外） |
 
 ---
 
