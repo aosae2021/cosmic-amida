@@ -283,16 +283,16 @@ export default function WarikanApp() {
         currentSponsor !== null &&
         currentSponsor.member.id === lastSponsorId;
 
-    // Reveal フェーズの 3D 降下アニメーション（ゴール直前 0.8秒の寸止めフェイント付き！）
+    // Reveal フェーズの 3D 降下アニメーション（火花を吹きながら降下＋ゴール直前 0.9秒の寸止めフェイント！）
     useEffect(() => {
         if (stage !== "reveal" || finalResults.length === 0) return;
 
         const currentResult = finalResults[revealIdx];
         if (!currentResult) return;
 
-        const descentMs = 1200;
-        const holdMs = 800; // 志村さん流「0.8秒の寸止めタメ（間）」
-        const dropMs = 260;
+        const descentMs = 2600; // 火花を吹きながら横線をジグザグ降りる様子をしっかり見せる
+        const holdMs = 900; // 志村さん流「寸止めタメ（間）」で火花ブルブル噴射
+        const dropMs = 300;
         const totalMs = descentMs + holdMs + dropMs;
 
         const start = performance.now();
@@ -303,11 +303,11 @@ export default function WarikanApp() {
         const tick = (now: number) => {
             const elapsed = now - start;
             if (elapsed < descentMs) {
-                setTraceProgress((elapsed / descentMs) * 0.86);
+                setTraceProgress(Math.max(0.01, (elapsed / descentMs) * 0.88));
                 revealRafRef.current = requestAnimationFrame(tick);
             } else if (elapsed < descentMs + holdMs) {
                 // ゴール直前でピタッと止める寸止めフェイント！
-                setTraceProgress(0.86);
+                setTraceProgress(0.88);
                 if (!holdSoundPlayed) {
                     holdSoundPlayed = true;
                     setIsFeintHold(true);
@@ -317,7 +317,7 @@ export default function WarikanApp() {
             } else if (elapsed < totalMs) {
                 setIsFeintHold(false);
                 const dropT = (elapsed - descentMs - holdMs) / dropMs;
-                setTraceProgress(0.86 + dropT * 0.14);
+                setTraceProgress(0.88 + dropT * 0.12);
                 revealRafRef.current = requestAnimationFrame(tick);
             } else {
                 setIsFeintHold(false);
@@ -477,13 +477,43 @@ export default function WarikanApp() {
             ? finalResults[revealIdx].startIndex
             : null;
 
+    // 各柱の上端に表示する参加者名一覧
+    const pillarNames = useMemo(
+        () =>
+            Array.from({ length: memberCount }, (_, idx) => {
+                const mId = pillarAssignments[idx];
+                if (mId === undefined) return null;
+                return members.find((m) => m.id === mId)?.name ?? null;
+            }),
+        [memberCount, pillarAssignments, members]
+    );
+
+    // 到達済み（公開済み）のゴールインデックス一覧
+    const revealedGoalIndices = useMemo(() => {
+        if (stage === "summary") {
+            return Array.from({ length: memberCount }, (_, i) => i);
+        }
+        if (stage !== "reveal") return [];
+        const indices: number[] = [];
+        for (let i = 0; i < finalResults.length; i++) {
+            if (i < revealIdx || (i === revealIdx && traceProgress >= 1)) {
+                indices.push(finalResults[i].goalIndex);
+            }
+        }
+        return indices;
+    }, [stage, memberCount, finalResults, revealIdx, traceProgress]);
+
     return (
         <div className="relative min-h-screen w-full text-slate-100 overflow-x-hidden">
-            {/* 3D 宇宙背景 & あみだ柱 */}
+            {/* 3D 宇宙背景 & 火花を吹くあみだ柱 */}
             <WarikanScene3D
                 ladder={stage === "select" || stage === "reveal" || stage === "summary" ? ladder : null}
                 activeStartIndex={activeRevealStart}
                 traceProgress={stage === "reveal" ? traceProgress : 0}
+                isFeintHold={stage === "reveal" && isFeintHold}
+                pillarNames={pillarNames}
+                goalAmounts={goalAmounts}
+                revealedGoalIndices={revealedGoalIndices}
             />
 
             {/* ヘッダー */}
@@ -957,75 +987,86 @@ export default function WarikanApp() {
                     </section>
                 )}
 
-                {/* ─── STEP 4: 3D 降下＆1人ずつ結果発表 ─── */}
+                {/* ─── STEP 4: 3D 火花降下＆1人ずつ結果発表 ─── */}
                 {stage === "reveal" && finalResults[revealIdx] && (
-                    <section className="mt-4 rounded-2xl border border-amber-300/40 bg-slate-950/75 p-6 backdrop-blur-md shadow-2xl text-center space-y-4">
-                        <p className="text-xs font-bold tracking-widest text-blue-300">
-                            宇宙運命判定（{revealIdx + 1} / {finalResults.length}）
-                        </p>
-                        <h2 className="text-2xl font-black text-white">
-                            {finalResults[revealIdx].member.name} の支払額は…
-                        </h2>
-
+                    <>
                         {traceProgress < 1 ? (
-                            isFeintHold ? (
-                                <div className="py-6 space-y-1">
-                                    <p className="text-xl sm:text-2xl font-black text-amber-300 animate-bounce">
-                                        ……おっ！？ ちょっと待て！！
-                                    </p>
-                                    <p className="text-xs text-blue-200">
-                                        ゴール直前でピタッと止まった……！
-                                    </p>
-                                </div>
-                            ) : (
-                                <div className="py-6 text-lg font-bold text-amber-200 animate-pulse">
-                                    ✨ 光の玉が宇宙あみだを降下中… ✨
-                                </div>
-                            )
-                        ) : (
-                            <div className="py-4 space-y-2">
-                                <div className="text-5xl sm:text-6xl font-black text-transparent bg-clip-text bg-gradient-to-r from-amber-300 via-yellow-100 to-orange-400">
-                                    ¥{finalResults[revealIdx].amount.toLocaleString()}
-                                </div>
-                                {finalResults[revealIdx].amount === 0 && (
-                                    <p className="text-base font-extrabold text-emerald-300">
-                                        🎉 奇跡のタダ飯確定！！ 🎉
-                                    </p>
-                                )}
-                                {finalResults[revealIdx].amount === maxPaid && maxPaid > minPaid && (
-                                    <div className="space-y-0.5">
-                                        <p className="text-base font-extrabold text-rose-300">
-                                            👑 今夜のスポンサー様 決定！！（ズコーッ！）
+                            /* 降下中は3Dあみだ＆火花が全面に見えるよう、上部スリムバナー＋下部スキップのみ表示 */
+                            <>
+                                <div className="fixed top-16 left-1/2 -translate-x-1/2 z-30 w-[92%] max-w-md rounded-full border border-amber-300/50 bg-slate-950/75 px-5 py-2.5 text-center backdrop-blur-md shadow-xl">
+                                    {isFeintHold ? (
+                                        <p className="text-base sm:text-lg font-black text-amber-300 animate-bounce">
+                                            ⚡ ……おっ！？ ちょっと待て！！
                                         </p>
-                                        <p className="text-xs text-amber-200/90">
-                                            特権：次の店・乾杯の音頭の決定権を獲得！
+                                    ) : (
+                                        <p className="text-sm sm:text-base font-extrabold text-white">
+                                            🔥 {finalResults[revealIdx].member.name} の光の玉が火花を吹いて降下中…（{revealIdx + 1}/{finalResults.length}）
                                         </p>
-                                    </div>
-                                )}
-                            </div>
-                        )}
+                                    )}
+                                </div>
 
-                        <div className="flex flex-wrap justify-center gap-3 pt-2">
-                            {traceProgress >= 1 && (
-                                <button
-                                    type="button"
-                                    onClick={handleNextReveal}
-                                    className="rounded-full bg-blue-500 px-6 py-2.5 text-sm font-black text-white shadow-lg hover:bg-blue-400"
-                                >
-                                    {revealIdx + 1 < finalResults.length
-                                        ? "次の人を発表 →"
-                                        : "📋 全員の精算表を見る →"}
-                                </button>
-                            )}
-                            <button
-                                type="button"
-                                onClick={handleSkipToSummary}
-                                className="rounded-full border border-slate-500/70 bg-slate-900/70 px-4 py-2.5 text-xs font-bold text-slate-200 hover:bg-slate-800"
-                            >
-                                ⏭️ 全員の結果を一気に見る
-                            </button>
-                        </div>
-                    </section>
+                                <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-30">
+                                    <button
+                                        type="button"
+                                        onClick={handleSkipToSummary}
+                                        className="rounded-full border border-slate-400/60 bg-slate-950/80 px-5 py-2 text-xs font-bold text-slate-200 backdrop-blur-md hover:bg-slate-800 shadow-lg"
+                                    >
+                                        ⏭️ 全員の結果を一気に見る
+                                    </button>
+                                </div>
+                            </>
+                        ) : (
+                            /* ゴール到達後：下寄りにコンパクトな結果カードを表示（背景の光る経路も見える） */
+                            <section className="fixed bottom-5 left-1/2 -translate-x-1/2 z-30 w-[92%] max-w-md rounded-2xl border border-amber-300/60 bg-slate-950/85 p-5 backdrop-blur-md shadow-[0_0_50px_rgba(251,191,36,0.35)] text-center space-y-3">
+                                <p className="text-xs font-bold tracking-widest text-blue-300">
+                                    宇宙運命判定（{revealIdx + 1} / {finalResults.length}）
+                                </p>
+                                <h2 className="text-xl font-black text-white">
+                                    {finalResults[revealIdx].member.name} の支払額は…
+                                </h2>
+
+                                <div className="py-1 space-y-1">
+                                    <div className="text-5xl font-black text-transparent bg-clip-text bg-gradient-to-r from-amber-300 via-yellow-100 to-orange-400">
+                                        ¥{finalResults[revealIdx].amount.toLocaleString()}
+                                    </div>
+                                    {finalResults[revealIdx].amount === 0 && (
+                                        <p className="text-sm font-extrabold text-emerald-300">
+                                            🎉 奇跡のタダ飯確定！！ 🎉
+                                        </p>
+                                    )}
+                                    {finalResults[revealIdx].amount === maxPaid && maxPaid > minPaid && (
+                                        <div className="space-y-0.5">
+                                            <p className="text-sm font-extrabold text-rose-300">
+                                                👑 今夜のスポンサー様 決定！！（ズコーッ！）
+                                            </p>
+                                            <p className="text-[11px] text-amber-200/90">
+                                                特権：次の店・乾杯の音頭の決定権を獲得！
+                                            </p>
+                                        </div>
+                                    )}
+                                </div>
+
+                                <div className="flex flex-wrap justify-center gap-2.5 pt-1">
+                                    <button
+                                        type="button"
+                                        onClick={handleNextReveal}
+                                        className="rounded-full bg-blue-500 px-6 py-2.5 text-sm font-black text-white shadow-lg hover:bg-blue-400"
+                                    >
+                                        {revealIdx + 1 < finalResults.length
+                                            ? "次の人を発表 →"
+                                            : "📋 全員の精算表を見る →"}
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={handleSkipToSummary}
+                                        className="rounded-full border border-slate-500/70 bg-slate-900/70 px-4 py-2.5 text-xs font-bold text-slate-200 hover:bg-slate-800"
+                                    >
+                                        ⏭️ 全員の結果を一気に見る
+                                    </button>
+                                </div>
+                            </section>
+                        )}
+                    </>
                 )}
 
                 {/* ─── STEP 5: 精算結果ボード & シェア ─── */}
