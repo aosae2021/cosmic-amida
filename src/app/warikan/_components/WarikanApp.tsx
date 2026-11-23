@@ -954,69 +954,73 @@ export default function WarikanApp() {
                 {/* ─── STEP 3: 柱選択（中央の3Dあみだ全体：上端の名前〜下端の金額が丸見え！） ─── */}
                 {stage === "select" && members[selectOrderIdx] && (
                     <>
-                        {/* 上部スリムバー */}
-                        <motion.div
-                            initial={{ opacity: 0, y: -12 }}
-                            animate={{ opacity: 1, y: 0 }}
-                            transition={{ duration: 0.4, ease: [0.22, 1, 0.36, 1] }}
-                            className="fixed top-14 left-1/2 -translate-x-1/2 z-[200] w-[94%] max-w-xl rounded-2xl border border-blue-300/40 bg-slate-950/75 px-4 py-2.5 backdrop-blur-md shadow-xl flex flex-wrap items-center justify-between gap-2"
-                        >
-                            <div>
-                                <p className="text-[11px] font-bold text-blue-300">
-                                    柱を選択（{selectOrderIdx + 1} / {members.length}人目）
-                                </p>
-                                <h2 className="text-base sm:text-lg font-black text-white">
-                                    {members[selectOrderIdx].name} の柱を選んでください
-                                </h2>
-                            </div>
-                            <button
-                                type="button"
-                                onClick={() => setShowGoalAmounts((v) => !v)}
-                                className="hover-spring rounded-full border border-amber-300/40 bg-amber-950/50 px-3 py-1 text-[11px] font-bold text-amber-200"
+                        {/* 上部スリムバー（中央揃えラッパーで Framer Motion transform 競合を防止） */}
+                        <div className="fixed top-14 inset-x-0 z-[200] flex justify-center px-3 pointer-events-none">
+                            <motion.div
+                                initial={{ opacity: 0, y: -12 }}
+                                animate={{ opacity: 1, y: 0 }}
+                                transition={{ duration: 0.4, ease: [0.22, 1, 0.36, 1] }}
+                                className="pointer-events-auto w-full max-w-xl rounded-2xl border border-blue-300/40 bg-slate-950/75 px-4 py-2 backdrop-blur-md shadow-xl flex flex-wrap items-center justify-between gap-2"
                             >
-                                {showGoalAmounts ? "🙈 金額を隠す" : "👀 金額を見る"}
-                            </button>
-                        </motion.div>
+                                <div>
+                                    <p className="text-[11px] font-bold text-blue-300">
+                                        柱を選択（{selectOrderIdx + 1} / {members.length}人目）
+                                    </p>
+                                    <h2 className="text-base sm:text-lg font-black text-white">
+                                        {members[selectOrderIdx].name} の柱を選んでください
+                                    </h2>
+                                </div>
+                                <button
+                                    type="button"
+                                    onClick={() => setShowGoalAmounts((v) => !v)}
+                                    className="hover-spring rounded-full border border-amber-300/40 bg-amber-950/50 px-3 py-1 text-[11px] font-bold text-amber-200"
+                                >
+                                    {showGoalAmounts ? "🙈 金額を隠す" : "👀 金額を見る"}
+                                </button>
+                            </motion.div>
+                        </div>
 
-                        {/* 下部スリム柱ボタンバー（3D全体の上端・下端を絶対に隠さない） */}
-                        <motion.div
-                            initial={{ opacity: 0, y: 18 }}
-                            animate={{ opacity: 1, y: 0 }}
-                            transition={{ duration: 0.4, ease: [0.22, 1, 0.36, 1] }}
-                            className="fixed bottom-4 left-1/2 -translate-x-1/2 z-[200] w-[95%] max-w-2xl rounded-2xl border border-blue-300/35 bg-slate-950/80 p-3 backdrop-blur-md shadow-2xl"
-                        >
-                            <div
-                                className="grid gap-1.5"
-                                style={{
-                                    gridTemplateColumns: `repeat(${Math.min(memberCount, 4)}, minmax(0, 1fr))`,
-                                }}
+                        {/* 下部スリム柱ボタンバー（中央揃え・コンパクト高さで3D下端の金額を隠さない） */}
+                        <div className="fixed bottom-3 inset-x-0 z-[200] flex justify-center px-3 pointer-events-none">
+                            <motion.div
+                                initial={{ opacity: 0, y: 18 }}
+                                animate={{ opacity: 1, y: 0 }}
+                                transition={{ duration: 0.4, ease: [0.22, 1, 0.36, 1] }}
+                                className="pointer-events-auto w-full max-w-2xl rounded-2xl border border-blue-300/35 bg-slate-950/80 p-2.5 backdrop-blur-md shadow-2xl"
                             >
-                                {Array.from({ length: memberCount }, (_, idx) => {
-                                    const assignedId = pillarAssignments[idx];
-                                    const assignedMember = members.find((m) => m.id === assignedId);
-                                    return (
-                                        <button
-                                            key={`pick-${idx}`}
-                                            type="button"
-                                            disabled={Boolean(assignedMember)}
-                                            onClick={() => handleSelectPillar(idx)}
-                                            className={`hover-spring rounded-xl border py-2 px-2 text-center ${
-                                                assignedMember
-                                                    ? "border-slate-700 bg-slate-900/70 text-slate-400 cursor-not-allowed"
-                                                    : "border-blue-400/70 bg-blue-950/75 text-white hover:bg-blue-700/70 shadow-md"
-                                            }`}
-                                        >
-                                            <div className="text-[10px] font-bold text-blue-300">
-                                                ▼ 柱 {idx + 1}
-                                            </div>
-                                            <div className="text-xs sm:text-sm font-extrabold truncate">
-                                                {assignedMember ? assignedMember.name : "えらぶ"}
-                                            </div>
-                                        </button>
-                                    );
-                                })}
-                            </div>
-                        </motion.div>
+                                <div
+                                    className="grid gap-1.5"
+                                    style={{
+                                        gridTemplateColumns: `repeat(${Math.min(memberCount, 8)}, minmax(0, 1fr))`,
+                                    }}
+                                >
+                                    {Array.from({ length: memberCount }, (_, idx) => {
+                                        const assignedId = pillarAssignments[idx];
+                                        const assignedMember = members.find((m) => m.id === assignedId);
+                                        return (
+                                            <button
+                                                key={`pick-${idx}`}
+                                                type="button"
+                                                disabled={Boolean(assignedMember)}
+                                                onClick={() => handleSelectPillar(idx)}
+                                                className={`hover-spring rounded-xl border py-1.5 px-1.5 text-center ${
+                                                    assignedMember
+                                                        ? "border-slate-700 bg-slate-900/70 text-slate-400 cursor-not-allowed"
+                                                        : "border-blue-400/70 bg-blue-950/75 text-white hover:bg-blue-700/70 shadow-md"
+                                                }`}
+                                            >
+                                                <div className="text-[10px] font-bold text-blue-300">
+                                                    ▼ 柱 {idx + 1}
+                                                </div>
+                                                <div className="text-xs font-extrabold truncate">
+                                                    {assignedMember ? assignedMember.name : "えらぶ"}
+                                                </div>
+                                            </button>
+                                        );
+                                    })}
+                                </div>
+                            </motion.div>
+                        </div>
                     </>
                 )}
 
@@ -1025,47 +1029,50 @@ export default function WarikanApp() {
                     <>
                         {revealPhase !== "landed" ? (
                             <div key="descending-hud">
-                                <motion.div
-                                    key={revealPhase}
-                                    initial={{ opacity: 0, y: -14, scale: 0.92 }}
-                                    animate={{ opacity: 1, y: 0, scale: 1 }}
-                                    transition={{ duration: 0.45, ease: [0.34, 1.45, 0.64, 1] }}
-                                    className="fixed top-16 left-1/2 -translate-x-1/2 z-[200] w-[92%] max-w-md rounded-full border border-amber-300/60 bg-slate-950/75 px-5 py-2.5 text-center backdrop-blur-md shadow-xl"
-                                >
-                                    {revealPhase === "lockon" ? (
-                                        <p className="text-sm sm:text-base font-black text-blue-200">
-                                            🎯 {finalResults[revealIdx].member.name} にロックオン！運命スタート！
-                                        </p>
-                                    ) : revealPhase === "feint" ? (
-                                        <p className="text-base sm:text-lg font-black text-amber-300">
-                                            ⚡ ……おっ！？ ちょっと待て！！
-                                        </p>
-                                    ) : (
-                                        <p className="text-sm sm:text-base font-extrabold text-white">
-                                            🔥 {finalResults[revealIdx].member.name} の光の玉が火花を吹いて降下中…（{revealIdx + 1}/{finalResults.length}）
-                                        </p>
-                                    )}
-                                </motion.div>
+                                <div className="fixed top-16 inset-x-0 z-[200] flex justify-center px-4 pointer-events-none">
+                                    <motion.div
+                                        key={revealPhase}
+                                        initial={{ opacity: 0, y: -14, scale: 0.92 }}
+                                        animate={{ opacity: 1, y: 0, scale: 1 }}
+                                        transition={{ duration: 0.45, ease: [0.34, 1.45, 0.64, 1] }}
+                                        className="w-full max-w-md rounded-full border border-amber-300/60 bg-slate-950/75 px-5 py-2.5 text-center backdrop-blur-md shadow-xl"
+                                    >
+                                        {revealPhase === "lockon" ? (
+                                            <p className="text-sm sm:text-base font-black text-blue-200">
+                                                🎯 {finalResults[revealIdx].member.name} にロックオン！運命スタート！
+                                            </p>
+                                        ) : revealPhase === "feint" ? (
+                                            <p className="text-base sm:text-lg font-black text-amber-300">
+                                                ⚡ ……おっ！？ ちょっと待て！！
+                                            </p>
+                                        ) : (
+                                            <p className="text-sm sm:text-base font-extrabold text-white">
+                                                🔥 {finalResults[revealIdx].member.name} の光の玉が火花を吹いて降下中…（{revealIdx + 1}/{finalResults.length}）
+                                            </p>
+                                        )}
+                                    </motion.div>
+                                </div>
 
-                                <div className="fixed bottom-5 left-1/2 -translate-x-1/2 z-[200]">
+                                <div className="fixed bottom-5 inset-x-0 z-[200] flex justify-center pointer-events-none">
                                     <button
                                         type="button"
                                         onClick={handleSkipToSummary}
-                                        className="rounded-full border border-slate-400/60 bg-slate-950/85 px-5 py-2 text-xs font-bold text-slate-200 backdrop-blur-md hover:bg-slate-800 shadow-lg"
+                                        className="pointer-events-auto rounded-full border border-slate-400/60 bg-slate-950/85 px-5 py-2 text-xs font-bold text-slate-200 backdrop-blur-md hover:bg-slate-800 shadow-lg"
                                     >
                                         ⏭️ 全員の結果を一気に見る
                                     </button>
                                 </div>
                             </div>
                         ) : (
-                            /* 第4幕：ゴール着弾後（transitions.dev イージングで下寄りから滑らか＆バウンシー登場） */
-                            <motion.section
-                                key={`landed-${revealIdx}`}
-                                initial={{ opacity: 0, y: 28, filter: "blur(3px)" }}
-                                animate={{ opacity: 1, y: 0, filter: "blur(0px)" }}
-                                transition={{ duration: 0.4, ease: [0.22, 1, 0.36, 1] }}
-                                className="fixed bottom-5 left-1/2 -translate-x-1/2 z-[200] w-[92%] max-w-md rounded-2xl border border-amber-300/60 bg-slate-950/88 p-5 backdrop-blur-md shadow-[0_0_50px_rgba(251,191,36,0.35)] text-center space-y-3"
-                            >
+                            /* 第4幕：ゴール着弾後（中央揃えラッパー＋transitions.dev イージング） */
+                            <div className="fixed bottom-5 inset-x-0 z-[200] flex justify-center px-4 pointer-events-none">
+                                <motion.section
+                                    key={`landed-${revealIdx}`}
+                                    initial={{ opacity: 0, y: 28, filter: "blur(3px)" }}
+                                    animate={{ opacity: 1, y: 0, filter: "blur(0px)" }}
+                                    transition={{ duration: 0.4, ease: [0.22, 1, 0.36, 1] }}
+                                    className="pointer-events-auto w-full max-w-md rounded-2xl border border-amber-300/60 bg-slate-950/88 p-5 backdrop-blur-md shadow-[0_0_50px_rgba(251,191,36,0.35)] text-center space-y-3"
+                                >
                                 <p className="text-xs font-bold tracking-widest text-blue-300">
                                     宇宙運命判定（{revealIdx + 1} / {finalResults.length}）
                                 </p>
@@ -1117,7 +1124,8 @@ export default function WarikanApp() {
                                         ⏭️ 全員の結果を一気に見る
                                     </button>
                                 </div>
-                            </motion.section>
+                                </motion.section>
+                            </div>
                         )}
                     </>
                 )}
