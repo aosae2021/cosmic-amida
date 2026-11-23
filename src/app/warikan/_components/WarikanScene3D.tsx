@@ -3,17 +3,16 @@
 /**
  * WarikanScene3D.tsx
  *
- * 飲み会・宇宙割り勘モード用の本格 3D 宇宙あみだくじシーン。
- * - 本家おみくじモードと同じ DirectionalSparks（HDR 火花パーティクル）＆
- *   TubeGeometry 黄金軌跡 ＆ EffectComposer Bloom グロウを搭載。
- * - 降下中はカメラが火花を吹く光の玉にダイナミックに追従し、
- *   寸止めフェイント時は玉が震えながら火花を噴射してドキドキ感を最大化。
- * - 柱の上端に「参加者名」、下端に「？？？（到達ゴールのみ金額オープン）」を表示。
+ * 飲み会・宇宙割り勘モード用のシネマティック 3D 宇宙あみだくじシーン。
+ * - スタート時（柱選択フェーズ）は、上端の「参加者名」から下端の「金額（選択肢）」まで
+ *   1画面に全体が綺麗に収まる俯瞰カメラで表示。
+ * - 降下スタート後は 4 幕のドラマティックカメラワーク（ロックオンズーム → 火花降下＆バンキング
+ *   → 寸止め超ズーム＆シェイク → 着弾インパクト＆俯瞰戻り）を実行。
  */
 
 import React, { useMemo, useRef } from "react";
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
-import { Stars, Sparkles, OrbitControls, Html } from "@react-three/drei";
+import { Stars, Sparkles, Html } from "@react-three/drei";
 import { EffectComposer, Bloom, Vignette } from "@react-three/postprocessing";
 import * as THREE from "three";
 import SolarSystem from "../../_components/SolarSystem";
@@ -21,32 +20,36 @@ import CosmicVortex from "../../_components/CosmicVortex";
 import DirectionalSparks from "../../_components/DirectionalSparks";
 import type { WarikanLadder } from "../../../lib/warikanLogic";
 
+export type RevealSubPhase = "idle" | "lockon" | "descending" | "feint" | "landed";
+
 export interface WarikanScene3DProps {
     ladder: WarikanLadder | null;
     activeStartIndex: number | null;
     /** 0.0 〜 1.0 の降下進捗 */
     traceProgress: number;
-    /** ゴール直前の寸止めフェイント中かどうか */
-    isFeintHold?: boolean;
+    /** 現在のドラマティック演出フェーズ */
+    revealPhase?: RevealSubPhase;
     /** 柱ごとの参加者名（インデックス順） */
     pillarNames?: (string | null)[];
     /** ゴールごとの金額（インデックス順） */
     goalAmounts?: number[];
-    /** すでに到達・公開済みのゴールインデックス一覧 */
+    /** 下端のゴール金額を最初から表示するかどうか */
+    showGoalAmounts?: boolean;
+    /** すでに到達・確定済みのゴールインデックス一覧 */
     revealedGoalIndices?: number[];
 }
 
-const PILLAR_HEIGHT = 13;
+const PILLAR_HEIGHT = 11.2;
 
 function getPillarX(index: number, count: number): number {
-    const spacing = Math.min(2.5, 11.5 / Math.max(1, count - 1));
+    const spacing = Math.min(2.4, 11.2 / Math.max(1, count - 1));
     const totalWidth = spacing * (count - 1);
     return -totalWidth / 2 + index * spacing;
 }
 
 function getLevelY(level: number, totalLevels: number): number {
-    const topY = PILLAR_HEIGHT / 2 - 1.3;
-    const bottomY = -PILLAR_HEIGHT / 2 + 1.3;
+    const topY = PILLAR_HEIGHT / 2 - 1.1;
+    const bottomY = -PILLAR_HEIGHT / 2 + 1.1;
     if (totalLevels <= 1) return 0;
     return topY - (level / (totalLevels - 1)) * (topY - bottomY);
 }
@@ -74,16 +77,15 @@ function buildTracePoints(ladder: WarikanLadder, startIndex: number): THREE.Vect
 
     raw.push(new THREE.Vector3(getPillarX(col, ladder.memberCount), bottomY, 0));
 
-    // 角が丸くなりすぎないよう各セグメントに中間点を挿入
     const dense: THREE.Vector3[] = [raw[0]];
     for (let i = 0; i < raw.length - 1; i++) {
         const a = raw[i];
         const b = raw[i + 1];
         const dist = a.distanceTo(b);
         if (dist > 0.2) {
-            dense.push(a.clone().lerp(b, 0.15));
+            dense.push(a.clone().lerp(b, 0.14));
             dense.push(a.clone().lerp(b, 0.5));
-            dense.push(a.clone().lerp(b, 0.85));
+            dense.push(a.clone().lerp(b, 0.86));
         }
         dense.push(b);
     }
@@ -91,28 +93,29 @@ function buildTracePoints(ladder: WarikanLadder, startIndex: number): THREE.Vect
 }
 
 /**
- * 火花を吹き散らしながら光る軌跡を描くボール＆ダイナミックカメラ制御
+ * 火花を吹き散らしながら光る軌跡を描くボール＆4幕シネマティックカメラ制御
  */
 function FieryBallAndCamera({
     points,
     progress,
-    isFeintHold,
-    isDescending,
+    revealPhase,
 }: {
     points: THREE.Vector3[] | null;
     progress: number;
-    isFeintHold: boolean;
-    isDescending: boolean;
+    revealPhase: RevealSubPhase;
 }) {
     const { camera, size } = useThree();
     const isPortrait = size.width < size.height;
-    const overviewZ = isPortrait ? 23 : 16.5;
+    // 上端の名前〜下端の金額まで余裕で1画面に収まる俯瞰距離
+    const overviewZ = isPortrait ? 28.5 : 20.0;
+    const baseFov = isPortrait ? 60 : 52;
 
     const ballGroupRef = useRef<THREE.Group>(null);
     const tubeGeomRef = useRef<THREE.TubeGeometry>(null);
     const tipPosRef = useRef<THREE.Vector3 | null>(null);
     const tangentRef = useRef(new THREE.Vector3(0, -1, 0));
-    const lookAtRef = useRef(new THREE.Vector3(0, 0.5, 0));
+    const lookAtRef = useRef(new THREE.Vector3(0, 0.1, 0));
+    const bankRef = useRef(0);
 
     const curve = useMemo(() => {
         if (!points || points.length < 2) return null;
@@ -120,43 +123,98 @@ function FieryBallAndCamera({
     }, [points]);
 
     useFrame((state) => {
-        // 1. 軌跡チューブ & 火花玉の更新
-        if (curve && ballGroupRef.current && progress > 0) {
-            const t = Math.max(0, Math.min(1, progress));
+        const elapsed = state.clock.elapsedTime;
+        const isActiveCamera =
+            revealPhase === "lockon" ||
+            revealPhase === "descending" ||
+            revealPhase === "feint";
+
+        if (curve && ballGroupRef.current && revealPhase !== "idle") {
+            const t =
+                revealPhase === "lockon"
+                    ? 0
+                    : Math.max(0, Math.min(1, progress));
             const pos = curve.getPointAt(t);
             const tangent = curve.getTangentAt(t).normalize();
 
-            // 寸止めフェイント中は小刻みにブルブル振動させて緊迫感アップ！
-            const jitterX = isFeintHold ? Math.sin(state.clock.elapsedTime * 55) * 0.12 : 0;
-            const jitterY = isFeintHold ? Math.cos(state.clock.elapsedTime * 63) * 0.08 : 0;
+            // 寸止めフェイント中はブルブル震えて臨場感アップ
+            const isFeint = revealPhase === "feint";
+            const jitterX = isFeint ? Math.sin(elapsed * 58) * 0.12 : 0;
+            const jitterY = isFeint ? Math.cos(elapsed * 66) * 0.08 : 0;
+
+            // ロックオン中は玉が脈動しながらチャージ
+            const ballScale =
+                revealPhase === "lockon"
+                    ? 0.9 + Math.sin(elapsed * 18) * 0.25
+                    : isFeint
+                    ? 1.3 + Math.sin(elapsed * 30) * 0.12
+                    : 1.05;
 
             ballGroupRef.current.position.set(pos.x + jitterX, pos.y + jitterY, pos.z);
-            ballGroupRef.current.scale.setScalar(isFeintHold ? 1.25 : 1.0);
+            ballGroupRef.current.scale.setScalar(ballScale);
             tipPosRef.current = ballGroupRef.current.position;
-            tangentRef.current.copy(isFeintHold ? new THREE.Vector3(0, -1, 0) : tangent);
+            tangentRef.current.copy(isFeint ? new THREE.Vector3(0, -1, 0) : tangent);
 
             if (tubeGeomRef.current && tubeGeomRef.current.index) {
                 const totalIndices = tubeGeomRef.current.index.count;
-                tubeGeomRef.current.setDrawRange(0, Math.floor(t * totalIndices));
+                const drawCount =
+                    revealPhase === "lockon" ? 0 : Math.floor(t * totalIndices);
+                tubeGeomRef.current.setDrawRange(0, drawCount);
             }
 
-            // 2. カメラ追従（降下中は玉にグッと寄って迫力満点に追いかける！）
-            if (isDescending) {
-                const zoomZ = isFeintHold
-                    ? isPortrait
-                        ? 8.5
-                        : 6.8
-                    : isPortrait
-                    ? 11.5
-                    : 8.8;
-                const targetCamPos = new THREE.Vector3(
-                    pos.x * 0.85,
-                    pos.y + 1.2,
-                    zoomZ
-                );
-                camera.position.lerp(targetCamPos, 0.09);
-                lookAtRef.current.lerp(new THREE.Vector3(pos.x, pos.y - 0.6, 0), 0.12);
+            if (isActiveCamera) {
+                let targetCamPos: THREE.Vector3;
+                let targetLookAt: THREE.Vector3;
+                let targetFov = baseFov;
+                let targetBank = 0;
+
+                if (revealPhase === "lockon") {
+                    // 第1幕：スタート柱の上端（参加者名）へドラマティックにズームイン
+                    const zoomZ = isPortrait ? 12.0 : 9.2;
+                    targetCamPos = new THREE.Vector3(pos.x * 0.95, pos.y + 0.8, zoomZ);
+                    targetLookAt = new THREE.Vector3(pos.x, pos.y - 0.8, 0);
+                    targetFov = baseFov - 5;
+                } else if (revealPhase === "feint") {
+                    // 第3幕：ゴール直前で超ズーム＋微細カメラシェイク
+                    const zoomZ = isPortrait ? 9.2 : 7.0;
+                    const shakeX = Math.sin(elapsed * 42) * 0.08;
+                    const shakeY = Math.cos(elapsed * 49) * 0.06;
+                    targetCamPos = new THREE.Vector3(
+                        pos.x * 0.9 + shakeX,
+                        pos.y + 0.4 + shakeY,
+                        zoomZ
+                    );
+                    targetLookAt = new THREE.Vector3(pos.x, pos.y - 0.9, 0);
+                    targetFov = baseFov - 8;
+                } else {
+                    // 第2幕：火花を吹きながら降下を追従（横移動でバンキング＆FOV拡大！）
+                    const isHorizontal = Math.abs(tangent.x) > 0.45;
+                    const zoomZ = isPortrait ? 12.5 : 9.6;
+                    targetCamPos = new THREE.Vector3(
+                        pos.x * 0.85 - tangent.x * 1.4,
+                        pos.y + 1.1,
+                        zoomZ
+                    );
+                    targetLookAt = new THREE.Vector3(
+                        pos.x + tangent.x * 0.6,
+                        pos.y - 0.8,
+                        0
+                    );
+                    targetFov = isHorizontal ? baseFov + 7 : baseFov + 2;
+                    targetBank = isHorizontal ? -Math.sign(tangent.x) * 0.11 : 0;
+                }
+
+                camera.position.lerp(targetCamPos, 0.1);
+                lookAtRef.current.lerp(targetLookAt, 0.13);
                 camera.lookAt(lookAtRef.current);
+
+                bankRef.current = THREE.MathUtils.lerp(bankRef.current, targetBank, 0.12);
+                camera.rotation.z += bankRef.current;
+
+                if (camera instanceof THREE.PerspectiveCamera) {
+                    camera.fov = THREE.MathUtils.lerp(camera.fov, targetFov, 0.1);
+                    camera.updateProjectionMatrix();
+                }
                 return;
             }
         } else {
@@ -166,14 +224,26 @@ function FieryBallAndCamera({
             }
         }
 
-        // 俯瞰カメラへスムーズに戻す
-        const overviewPos = new THREE.Vector3(0, 0.8, overviewZ);
-        camera.position.lerp(overviewPos, 0.06);
-        lookAtRef.current.lerp(new THREE.Vector3(0, 0.2, 0), 0.08);
+        // 全体俯瞰カメラ（スタート時・ゴール着弾後：上端の名前〜下端の金額まで丸見え）
+        const gentleSwayX = Math.sin(elapsed * 0.35) * 0.45;
+        const overviewPos = new THREE.Vector3(gentleSwayX, 0.15, overviewZ);
+        camera.position.lerp(overviewPos, 0.08);
+        lookAtRef.current.lerp(new THREE.Vector3(0, 0.0, 0), 0.1);
         camera.lookAt(lookAtRef.current);
+        bankRef.current = THREE.MathUtils.lerp(bankRef.current, 0, 0.1);
+
+        if (camera instanceof THREE.PerspectiveCamera) {
+            camera.fov = THREE.MathUtils.lerp(camera.fov, baseFov, 0.08);
+            camera.updateProjectionMatrix();
+        }
     });
 
-    if (!curve || progress <= 0) return null;
+    if (!curve || revealPhase === "idle") return null;
+
+    const showSparks =
+        revealPhase === "lockon" ||
+        revealPhase === "descending" ||
+        revealPhase === "feint";
 
     return (
         <group>
@@ -183,7 +253,7 @@ function FieryBallAndCamera({
                 <meshStandardMaterial
                     color="#ffdd44"
                     emissive="#ff9900"
-                    emissiveIntensity={3.5}
+                    emissiveIntensity={3.6}
                     transparent
                     opacity={0.95}
                 />
@@ -192,29 +262,28 @@ function FieryBallAndCamera({
             {/* 先端の灼熱ライトコア */}
             <group ref={ballGroupRef} position={curve.getPointAt(0)}>
                 <mesh>
-                    <sphereGeometry args={[0.34, 24, 24]} />
+                    <sphereGeometry args={[0.35, 24, 24]} />
                     <meshStandardMaterial
                         color="#ffffff"
                         emissive="#ffee88"
-                        emissiveIntensity={10}
+                        emissiveIntensity={11}
                     />
                 </mesh>
-                {/* 外側の炎オーラ */}
                 <mesh>
-                    <sphereGeometry args={[0.52, 16, 16]} />
+                    <sphereGeometry args={[0.56, 16, 16]} />
                     <meshBasicMaterial
                         color="#ff7700"
                         transparent
-                        opacity={0.4}
+                        opacity={0.45}
                         blending={THREE.AdditiveBlending}
                         depthWrite={false}
                     />
                 </mesh>
-                <pointLight color="#ffaa22" intensity={18} distance={10} decay={2} />
+                <pointLight color="#ffaa22" intensity={20} distance={11} decay={2} />
             </group>
 
             {/* 本家と同じ HDR 火花パーティクル噴射！ */}
-            {isDescending && (
+            {showSparks && (
                 <DirectionalSparks tipPosRef={tipPosRef} tangentRef={tangentRef} />
             )}
         </group>
@@ -225,9 +294,10 @@ function LadderMeshes({
     ladder,
     activeStartIndex,
     traceProgress,
-    isFeintHold = false,
+    revealPhase = "idle",
     pillarNames = [],
     goalAmounts = [],
+    showGoalAmounts = true,
     revealedGoalIndices = [],
 }: WarikanScene3DProps) {
     const tracePoints = useMemo(() => {
@@ -235,12 +305,10 @@ function LadderMeshes({
         return buildTracePoints(ladder, activeStartIndex);
     }, [ladder, activeStartIndex]);
 
-    const isDescending = traceProgress > 0 && traceProgress < 1;
-
     if (!ladder) return null;
 
     return (
-        <group position={[0, 0.3, 0]}>
+        <group position={[0, 0.2, 0]}>
             {/* クリスタル縦柱 */}
             {Array.from({ length: ladder.memberCount }, (_, i) => {
                 const x = getPillarX(i, ladder.memberCount);
@@ -248,6 +316,7 @@ function LadderMeshes({
                 const topName = pillarNames[i];
                 const isGoalRevealed = revealedGoalIndices.includes(i);
                 const goalAmt = goalAmounts[i];
+                const shouldShowAmount = (showGoalAmounts || isGoalRevealed) && goalAmt !== undefined;
 
                 return (
                     <group key={`pillar-${i}`} position={[x, 0, 0]}>
@@ -270,58 +339,68 @@ function LadderMeshes({
                             color={isActive ? "#ffe066" : "#a8d8ff"}
                         />
 
-                        {/* 上端：参加者名ラベル */}
-                        {topName && (
-                            <Html position={[0, PILLAR_HEIGHT / 2 + 0.85, 0]} center zIndexRange={[20, 10]}>
-                                <div
-                                    style={{
-                                        background: isActive
-                                            ? "rgba(255, 165, 0, 0.85)"
-                                            : "rgba(10, 20, 50, 0.78)",
-                                        border: isActive
-                                            ? "1px solid #fff3b0"
-                                            : "1px solid rgba(126, 184, 247, 0.5)",
-                                        color: isActive ? "#0f172a" : "#e0f2fe",
-                                        padding: "2px 8px",
-                                        borderRadius: "999px",
-                                        fontSize: "11px",
-                                        fontWeight: 900,
-                                        whiteSpace: "nowrap",
-                                        boxShadow: isActive
-                                            ? "0 0 14px rgba(255, 190, 60, 0.85)"
-                                            : "none",
-                                    }}
-                                >
-                                    {topName}
-                                </div>
-                            </Html>
-                        )}
+                        {/* 上端：誰がどこを選んでいるか（未選択は柱番号、選択済みは名前が光る） */}
+                        <Html position={[0, PILLAR_HEIGHT / 2 + 0.85, 0]} center zIndexRange={[20, 10]}>
+                            <div
+                                style={{
+                                    background: isActive
+                                        ? "linear-gradient(135deg, #fde047, #f97316)"
+                                        : topName
+                                        ? "rgba(37, 99, 235, 0.9)"
+                                        : "rgba(15, 23, 42, 0.78)",
+                                    border: isActive
+                                        ? "2px solid #ffffff"
+                                        : topName
+                                        ? "1px solid #93c5fd"
+                                        : "1px solid rgba(148, 163, 184, 0.45)",
+                                    color: isActive ? "#0f172a" : "#ffffff",
+                                    padding: "3px 9px",
+                                    borderRadius: "999px",
+                                    fontSize: ladder.memberCount >= 7 ? "10px" : "11px",
+                                    fontWeight: 900,
+                                    whiteSpace: "nowrap",
+                                    boxShadow: isActive
+                                        ? "0 0 18px rgba(251, 191, 36, 0.95)"
+                                        : topName
+                                        ? "0 0 12px rgba(59, 130, 246, 0.65)"
+                                        : "none",
+                                }}
+                            >
+                                {topName ? `${i + 1}:${topName}` : `柱 ${i + 1}`}
+                            </div>
+                        </Html>
 
-                        {/* 下端：ゴール金額（未公開は ？？？、到達ゴールはパカッと表示！） */}
+                        {/* 下端：一番下の選択肢（金額がスタート時から確認可能／到達時は黄金ハイライト） */}
                         {goalAmounts.length === ladder.memberCount && (
-                            <Html position={[0, -PILLAR_HEIGHT / 2 - 0.95, 0]} center zIndexRange={[20, 10]}>
+                            <Html position={[0, -PILLAR_HEIGHT / 2 - 0.9, 0]} center zIndexRange={[20, 10]}>
                                 <div
                                     style={{
                                         background: isGoalRevealed
                                             ? goalAmt === 0
-                                                ? "rgba(16, 185, 129, 0.9)"
-                                                : "rgba(217, 119, 6, 0.9)"
-                                            : "rgba(15, 23, 42, 0.82)",
+                                                ? "linear-gradient(135deg, #10b981, #059669)"
+                                                : "linear-gradient(135deg, #f59e0b, #ea580c)"
+                                            : shouldShowAmount && goalAmt === 0
+                                            ? "rgba(6, 78, 59, 0.88)"
+                                            : "rgba(15, 23, 42, 0.86)",
                                         border: isGoalRevealed
-                                            ? "1px solid #fef08a"
-                                            : "1px solid rgba(148, 163, 184, 0.4)",
+                                            ? "2px solid #fef08a"
+                                            : shouldShowAmount && goalAmt === 0
+                                            ? "1px solid #34d399"
+                                            : "1px solid rgba(251, 191, 36, 0.45)",
                                         color: "#ffffff",
                                         padding: "3px 9px",
                                         borderRadius: "8px",
-                                        fontSize: "11px",
+                                        fontSize: ladder.memberCount >= 7 ? "10px" : "11px",
                                         fontWeight: 900,
                                         whiteSpace: "nowrap",
+                                        transform: isGoalRevealed ? "scale(1.18)" : "scale(1)",
+                                        transition: "transform 400ms cubic-bezier(0.34, 1.45, 0.64, 1)",
                                         boxShadow: isGoalRevealed
-                                            ? "0 0 16px rgba(251, 191, 36, 0.7)"
+                                            ? "0 0 20px rgba(251, 191, 36, 0.85)"
                                             : "none",
                                     }}
                                 >
-                                    {isGoalRevealed && goalAmt !== undefined
+                                    {shouldShowAmount
                                         ? goalAmt === 0
                                             ? "🎉 ¥0"
                                             : `¥${goalAmt.toLocaleString()}`
@@ -351,35 +430,32 @@ function LadderMeshes({
                             emissive="#9333ea"
                             emissiveIntensity={1.6}
                             transparent
-                            opacity={0.9}
+                            opacity={0.92}
                         />
                     </mesh>
                 );
             })}
 
-            {/* 火花を吹きながら降下する光の玉＋黄金軌跡＋追従カメラ */}
+            {/* 火花を吹きながら降下する光の玉＋黄金軌跡＋4幕シネマティックカメラ */}
             <FieryBallAndCamera
                 points={tracePoints}
                 progress={traceProgress}
-                isFeintHold={isFeintHold}
-                isDescending={isDescending}
+                revealPhase={revealPhase}
             />
         </group>
     );
 }
 
 export default function WarikanScene3D(props: WarikanScene3DProps) {
-    const isDescending = props.traceProgress > 0 && props.traceProgress < 1;
-
     return (
         <div className="fixed inset-0 z-0 pointer-events-none">
             <Canvas
-                camera={{ position: [0, 0.8, 17], fov: 55, far: 20000 }}
+                camera={{ position: [0, 0.15, 20], fov: 52, far: 20000 }}
                 dpr={[1, 1.5]}
                 gl={{ antialias: true }}
             >
                 <color attach="background" args={["#020412"]} />
-                <ambientLight intensity={0.2} color="#cbdfff" />
+                <ambientLight intensity={0.22} color="#cbdfff" />
                 <pointLight position={[10, 12, 15]} intensity={1.8} color="#9ce0ff" />
                 <pointLight position={[-10, -8, 12]} intensity={1.2} color="#ff9cdd" />
 
@@ -401,16 +477,7 @@ export default function WarikanScene3D(props: WarikanScene3DProps) {
 
                 <LadderMeshes {...props} />
 
-                {/* 降下中以外はゆっくり俯瞰回転（降下中は追従カメラに譲る） */}
-                {!isDescending && (
-                    <OrbitControls
-                        enableZoom={false}
-                        enablePan={false}
-                        enabled={false}
-                    />
-                )}
-
-                {/* 本家と同じ Bloom グロウ（火花・軌跡・光の玉が宇宙空間で眩しく光る） */}
+                {/* Bloom グロウ（火花・軌跡・光の玉が宇宙空間で眩しく光る） */}
                 <EffectComposer>
                     <Bloom
                         intensity={0.45}
@@ -418,7 +485,7 @@ export default function WarikanScene3D(props: WarikanScene3DProps) {
                         luminanceSmoothing={0.15}
                         mipmapBlur
                     />
-                    <Vignette eskil={false} offset={0.15} darkness={0.9} />
+                    <Vignette eskil={false} offset={0.15} darkness={0.85} />
                 </EffectComposer>
             </Canvas>
         </div>

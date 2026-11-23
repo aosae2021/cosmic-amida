@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import Link from "next/link";
+import { motion, AnimatePresence } from "framer-motion";
 import confetti from "canvas-confetti";
 import {
     applyRoundUpToFund,
@@ -14,6 +15,7 @@ import {
 } from "../../../lib/warikanLogic";
 import { soundManager } from "../../../lib/sound";
 import AdSlot from "../../_components/AdSlot";
+import type { RevealSubPhase } from "./WarikanScene3D";
 
 const WarikanScene3D = dynamic(() => import("./WarikanScene3D"), { ssr: false });
 
@@ -64,12 +66,14 @@ export default function WarikanApp() {
     /** pillarIndex -> memberId (選択済みマッピング) */
     const [pillarAssignments, setPillarAssignments] = useState<Record<number, number>>({});
     const [selectOrderIdx, setSelectOrderIdx] = useState<number>(0);
-    const [peekGoals, setPeekGoals] = useState<boolean>(false);
+    /** 下端のゴール金額をスタート時から表示する（デフォルトON：誰がどこを狙うか丸見え！） */
+    const [showGoalAmounts, setShowGoalAmounts] = useState<boolean>(true);
 
     // ─── Reveal Animation State ───
     const [revealIdx, setRevealIdx] = useState<number>(0);
     const [traceProgress, setTraceProgress] = useState<number>(0);
-    const [isFeintHold, setIsFeintHold] = useState<boolean>(false);
+    const [revealPhase, setRevealPhase] = useState<RevealSubPhase>("idle");
+    const [impactFlashKey, setImpactFlashKey] = useState<number>(0);
     const [copiedSummary, setCopiedSummary] = useState<boolean>(false);
     /** 泣きの1回（天丼判定用：前回の最高額メンバーIDと泣きの回数） */
     const [lastSponsorId, setLastSponsorId] = useState<number | null>(null);
@@ -138,6 +142,7 @@ export default function WarikanApp() {
         setSelectOrderIdx(0);
         setRevealIdx(0);
         setTraceProgress(0);
+        setRevealPhase("idle");
         setOtokogiOpen(false);
         setOtokogiHero(null);
         setShowOtokogiBanner(false);
@@ -283,48 +288,62 @@ export default function WarikanApp() {
         currentSponsor !== null &&
         currentSponsor.member.id === lastSponsorId;
 
-    // Reveal フェーズの 3D 降下アニメーション（火花を吹きながら降下＋ゴール直前 0.9秒の寸止めフェイント！）
+    // Reveal フェーズの4幕シネマティック 3D 降下アニメーション
+    // 第1幕: ロックオンズーム(0.75s) → 第2幕: 火花降下(2.5s) → 第3幕: 寸止め超ズーム(0.9s) → 第4幕: 着弾インパクト(0.3s)
     useEffect(() => {
         if (stage !== "reveal" || finalResults.length === 0) return;
 
         const currentResult = finalResults[revealIdx];
         if (!currentResult) return;
 
-        const descentMs = 2600; // 火花を吹きながら横線をジグザグ降りる様子をしっかり見せる
-        const holdMs = 900; // 志村さん流「寸止めタメ（間）」で火花ブルブル噴射
-        const dropMs = 300;
-        const totalMs = descentMs + holdMs + dropMs;
+        const lockonMs = 750;
+        const descentMs = 2500;
+        const holdMs = 900;
+        const dropMs = 280;
+        const totalMs = lockonMs + descentMs + holdMs + dropMs;
 
         const start = performance.now();
+        let sweepPlayed = false;
         let holdSoundPlayed = false;
-        setIsFeintHold(false);
-        soundManager.playBallSweep();
+        setRevealPhase("lockon");
+        setTraceProgress(0);
+        soundManager.playPon();
 
         const tick = (now: number) => {
             const elapsed = now - start;
-            if (elapsed < descentMs) {
-                setTraceProgress(Math.max(0.01, (elapsed / descentMs) * 0.88));
+            if (elapsed < lockonMs) {
+                setRevealPhase("lockon");
+                setTraceProgress(0.005);
                 revealRafRef.current = requestAnimationFrame(tick);
-            } else if (elapsed < descentMs + holdMs) {
-                // ゴール直前でピタッと止める寸止めフェイント！
+            } else if (elapsed < lockonMs + descentMs) {
+                if (!sweepPlayed) {
+                    sweepPlayed = true;
+                    setRevealPhase("descending");
+                    soundManager.playBallSweep();
+                }
+                const p = (elapsed - lockonMs) / descentMs;
+                setTraceProgress(Math.max(0.01, p * 0.88));
+                revealRafRef.current = requestAnimationFrame(tick);
+            } else if (elapsed < lockonMs + descentMs + holdMs) {
                 setTraceProgress(0.88);
                 if (!holdSoundPlayed) {
                     holdSoundPlayed = true;
-                    setIsFeintHold(true);
+                    setRevealPhase("feint");
                     soundManager.playTensionHold();
                 }
                 revealRafRef.current = requestAnimationFrame(tick);
             } else if (elapsed < totalMs) {
-                setIsFeintHold(false);
-                const dropT = (elapsed - descentMs - holdMs) / dropMs;
+                setRevealPhase("descending");
+                const dropT = (elapsed - lockonMs - descentMs - holdMs) / dropMs;
                 setTraceProgress(0.88 + dropT * 0.12);
                 revealRafRef.current = requestAnimationFrame(tick);
             } else {
-                setIsFeintHold(false);
+                setRevealPhase("landed");
                 setTraceProgress(1);
+                setImpactFlashKey((k) => k + 1);
                 if (currentResult.amount === 0) {
                     soundManager.playResult("大吉");
-                    confetti({ particleCount: 90, spread: 80, origin: { y: 0.65 } });
+                    confetti({ particleCount: 110, spread: 95, origin: { y: 0.65 } });
                 } else if (currentResult.amount === maxPaid && maxPaid > minPaid) {
                     soundManager.playZukkoke();
                 } else {
@@ -352,8 +371,9 @@ export default function WarikanApp() {
         if (revealIdx + 1 < finalResults.length) {
             setRevealIdx(revealIdx + 1);
             setTraceProgress(0);
-            setIsFeintHold(false);
+            setRevealPhase("lockon");
         } else {
+            setRevealPhase("idle");
             setStage("summary");
             fireSummaryConfetti();
         }
@@ -361,7 +381,7 @@ export default function WarikanApp() {
 
     const handleSkipToSummary = () => {
         if (revealRafRef.current) cancelAnimationFrame(revealRafRef.current);
-        setIsFeintHold(false);
+        setRevealPhase("idle");
         setTraceProgress(1);
         setStage("summary");
         fireSummaryConfetti();
@@ -510,11 +530,20 @@ export default function WarikanApp() {
                 ladder={stage === "select" || stage === "reveal" || stage === "summary" ? ladder : null}
                 activeStartIndex={activeRevealStart}
                 traceProgress={stage === "reveal" ? traceProgress : 0}
-                isFeintHold={stage === "reveal" && isFeintHold}
+                revealPhase={stage === "reveal" ? revealPhase : "idle"}
                 pillarNames={pillarNames}
                 goalAmounts={goalAmounts}
+                showGoalAmounts={showGoalAmounts}
                 revealedGoalIndices={revealedGoalIndices}
             />
+
+            {/* 着弾インパクトのホワイトフラッシュ */}
+            {impactFlashKey > 0 && stage === "reveal" && revealPhase === "landed" && (
+                <div
+                    key={impactFlashKey}
+                    className="warikan-impact-flash fixed inset-0 z-40 bg-white pointer-events-none"
+                />
+            )}
 
             {/* ヘッダー */}
             <header className="relative z-20 flex items-center justify-between px-4 py-3 border-b border-blue-400/15 bg-slate-950/60 backdrop-blur-md">
@@ -919,83 +948,93 @@ export default function WarikanApp() {
                     </section>
                 )}
 
-                {/* ─── STEP 3: 柱選択 ─── */}
+                {/* ─── STEP 3: 柱選択（中央の3Dあみだ全体：上端の名前〜下端の金額が丸見え！） ─── */}
                 {stage === "select" && members[selectOrderIdx] && (
-                    <section className="rounded-2xl border border-blue-300/30 bg-slate-950/70 p-5 backdrop-blur-md shadow-2xl space-y-5">
-                        <div className="text-center space-y-1">
-                            <p className="text-xs font-bold text-blue-300">
-                                柱を選択（{selectOrderIdx + 1} / {members.length}人目）
-                            </p>
-                            <h2 className="text-2xl font-black text-white">
-                                {members[selectOrderIdx].name} の柱を選んでください
-                            </h2>
-                        </div>
-
-                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
-                            {Array.from({ length: memberCount }, (_, idx) => {
-                                const assignedId = pillarAssignments[idx];
-                                const assignedMember = members.find((m) => m.id === assignedId);
-                                return (
-                                    <button
-                                        key={`pick-${idx}`}
-                                        type="button"
-                                        disabled={Boolean(assignedMember)}
-                                        onClick={() => handleSelectPillar(idx)}
-                                        className={`rounded-xl border py-4 px-2 text-center transition-all ${
-                                            assignedMember
-                                                ? "border-slate-700 bg-slate-900/70 text-slate-400 cursor-not-allowed"
-                                                : "border-blue-400/60 bg-blue-950/65 text-white hover:bg-blue-700/60 hover:scale-105 shadow-lg"
-                                        }`}
-                                    >
-                                        <div className="text-xs text-blue-300">▼ 柱 {idx + 1}</div>
-                                        <div className="mt-1 font-extrabold truncate">
-                                            {assignedMember ? assignedMember.name : "えらぶ"}
-                                        </div>
-                                    </button>
-                                );
-                            })}
-                        </div>
-
-                        <div className="border-t border-blue-400/20 pt-3 flex items-center justify-between text-xs">
-                            <span className="text-slate-400">
-                                合計: ¥{totalAmount.toLocaleString()}
-                                {maxPerPerson ? `（上限 ¥${maxPerPerson.toLocaleString()}）` : ""}
-                            </span>
+                    <>
+                        {/* 上部スリムバー */}
+                        <motion.div
+                            initial={{ opacity: 0, y: -12 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            transition={{ duration: 0.4, ease: [0.22, 1, 0.36, 1] }}
+                            className="fixed top-14 left-1/2 -translate-x-1/2 z-30 w-[94%] max-w-xl rounded-2xl border border-blue-300/40 bg-slate-950/75 px-4 py-2.5 backdrop-blur-md shadow-xl flex flex-wrap items-center justify-between gap-2"
+                        >
+                            <div>
+                                <p className="text-[11px] font-bold text-blue-300">
+                                    柱を選択（{selectOrderIdx + 1} / {members.length}人目）
+                                </p>
+                                <h2 className="text-base sm:text-lg font-black text-white">
+                                    {members[selectOrderIdx].name} の柱を選んでください
+                                </h2>
+                            </div>
                             <button
                                 type="button"
-                                onClick={() => setPeekGoals((v) => !v)}
-                                className="text-blue-300 underline underline-offset-4"
+                                onClick={() => setShowGoalAmounts((v) => !v)}
+                                className="hover-spring rounded-full border border-amber-300/40 bg-amber-950/50 px-3 py-1 text-[11px] font-bold text-amber-200"
                             >
-                                {peekGoals ? "金額を隠す" : "金額ラインナップを見る"}
+                                {showGoalAmounts ? "🙈 金額を隠す" : "👀 金額を見る"}
                             </button>
-                        </div>
+                        </motion.div>
 
-                        {peekGoals && (
-                            <div className="flex flex-wrap gap-2 justify-center">
-                                {[...goalAmounts]
-                                    .sort((a, b) => a - b)
-                                    .map((amt, i) => (
-                                        <span
-                                            key={i}
-                                            className="rounded-full border border-amber-300/40 bg-amber-500/15 px-3 py-1 text-xs font-bold text-amber-200"
+                        {/* 下部スリム柱ボタンバー（3D全体の上端・下端を絶対に隠さない） */}
+                        <motion.div
+                            initial={{ opacity: 0, y: 18 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            transition={{ duration: 0.4, ease: [0.22, 1, 0.36, 1] }}
+                            className="fixed bottom-4 left-1/2 -translate-x-1/2 z-30 w-[95%] max-w-2xl rounded-2xl border border-blue-300/35 bg-slate-950/80 p-3 backdrop-blur-md shadow-2xl"
+                        >
+                            <div
+                                className="grid gap-1.5"
+                                style={{
+                                    gridTemplateColumns: `repeat(${Math.min(memberCount, 4)}, minmax(0, 1fr))`,
+                                }}
+                            >
+                                {Array.from({ length: memberCount }, (_, idx) => {
+                                    const assignedId = pillarAssignments[idx];
+                                    const assignedMember = members.find((m) => m.id === assignedId);
+                                    return (
+                                        <button
+                                            key={`pick-${idx}`}
+                                            type="button"
+                                            disabled={Boolean(assignedMember)}
+                                            onClick={() => handleSelectPillar(idx)}
+                                            className={`hover-spring rounded-xl border py-2 px-2 text-center ${
+                                                assignedMember
+                                                    ? "border-slate-700 bg-slate-900/70 text-slate-400 cursor-not-allowed"
+                                                    : "border-blue-400/70 bg-blue-950/75 text-white hover:bg-blue-700/70 shadow-md"
+                                            }`}
                                         >
-                                            ¥{amt.toLocaleString()}
-                                        </span>
-                                    ))}
+                                            <div className="text-[10px] font-bold text-blue-300">
+                                                ▼ 柱 {idx + 1}
+                                            </div>
+                                            <div className="text-xs sm:text-sm font-extrabold truncate">
+                                                {assignedMember ? assignedMember.name : "えらぶ"}
+                                            </div>
+                                        </button>
+                                    );
+                                })}
                             </div>
-                        )}
-                    </section>
+                        </motion.div>
+                    </>
                 )}
 
-                {/* ─── STEP 4: 3D 火花降下＆1人ずつ結果発表 ─── */}
+                {/* ─── STEP 4: 4幕ドラマティック 3D 火花降下＆結果発表 ─── */}
                 {stage === "reveal" && finalResults[revealIdx] && (
-                    <>
-                        {traceProgress < 1 ? (
-                            /* 降下中は3Dあみだ＆火花が全面に見えるよう、上部スリムバナー＋下部スキップのみ表示 */
-                            <>
-                                <div className="fixed top-16 left-1/2 -translate-x-1/2 z-30 w-[92%] max-w-md rounded-full border border-amber-300/50 bg-slate-950/75 px-5 py-2.5 text-center backdrop-blur-md shadow-xl">
-                                    {isFeintHold ? (
-                                        <p className="text-base sm:text-lg font-black text-amber-300 animate-bounce">
+                    <AnimatePresence mode="wait">
+                        {revealPhase !== "landed" ? (
+                            <div key="descending-hud">
+                                <motion.div
+                                    key={revealPhase}
+                                    initial={{ opacity: 0, y: -14, scale: 0.92 }}
+                                    animate={{ opacity: 1, y: 0, scale: 1 }}
+                                    transition={{ duration: 0.45, ease: [0.34, 1.45, 0.64, 1] }}
+                                    className="fixed top-16 left-1/2 -translate-x-1/2 z-30 w-[92%] max-w-md rounded-full border border-amber-300/60 bg-slate-950/75 px-5 py-2.5 text-center backdrop-blur-md shadow-xl"
+                                >
+                                    {revealPhase === "lockon" ? (
+                                        <p className="text-sm sm:text-base font-black text-blue-200">
+                                            🎯 {finalResults[revealIdx].member.name} にロックオン！運命スタート！
+                                        </p>
+                                    ) : revealPhase === "feint" ? (
+                                        <p className="text-base sm:text-lg font-black text-amber-300">
                                             ⚡ ……おっ！？ ちょっと待て！！
                                         </p>
                                     ) : (
@@ -1003,21 +1042,27 @@ export default function WarikanApp() {
                                             🔥 {finalResults[revealIdx].member.name} の光の玉が火花を吹いて降下中…（{revealIdx + 1}/{finalResults.length}）
                                         </p>
                                     )}
-                                </div>
+                                </motion.div>
 
-                                <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-30">
+                                <div className="fixed bottom-5 left-1/2 -translate-x-1/2 z-30">
                                     <button
                                         type="button"
                                         onClick={handleSkipToSummary}
-                                        className="rounded-full border border-slate-400/60 bg-slate-950/80 px-5 py-2 text-xs font-bold text-slate-200 backdrop-blur-md hover:bg-slate-800 shadow-lg"
+                                        className="hover-spring rounded-full border border-slate-400/60 bg-slate-950/80 px-5 py-2 text-xs font-bold text-slate-200 backdrop-blur-md hover:bg-slate-800 shadow-lg"
                                     >
                                         ⏭️ 全員の結果を一気に見る
                                     </button>
                                 </div>
-                            </>
+                            </div>
                         ) : (
-                            /* ゴール到達後：下寄りにコンパクトな結果カードを表示（背景の光る経路も見える） */
-                            <section className="fixed bottom-5 left-1/2 -translate-x-1/2 z-30 w-[92%] max-w-md rounded-2xl border border-amber-300/60 bg-slate-950/85 p-5 backdrop-blur-md shadow-[0_0_50px_rgba(251,191,36,0.35)] text-center space-y-3">
+                            /* 第4幕：ゴール着弾後（transitions.dev イージングで下寄りから滑らか＆バウンシー登場） */
+                            <motion.section
+                                key={`landed-${revealIdx}`}
+                                initial={{ opacity: 0, y: 28, filter: "blur(3px)" }}
+                                animate={{ opacity: 1, y: 0, filter: "blur(0px)" }}
+                                transition={{ duration: 0.4, ease: [0.22, 1, 0.36, 1] }}
+                                className="fixed bottom-5 left-1/2 -translate-x-1/2 z-30 w-[92%] max-w-md rounded-2xl border border-amber-300/60 bg-slate-950/88 p-5 backdrop-blur-md shadow-[0_0_50px_rgba(251,191,36,0.35)] text-center space-y-3"
+                            >
                                 <p className="text-xs font-bold tracking-widest text-blue-300">
                                     宇宙運命判定（{revealIdx + 1} / {finalResults.length}）
                                 </p>
@@ -1025,7 +1070,12 @@ export default function WarikanApp() {
                                     {finalResults[revealIdx].member.name} の支払額は…
                                 </h2>
 
-                                <div className="py-1 space-y-1">
+                                <motion.div
+                                    initial={{ scale: 0.55, opacity: 0 }}
+                                    animate={{ scale: 1, opacity: 1 }}
+                                    transition={{ duration: 0.5, ease: [0.34, 1.45, 0.64, 1] }}
+                                    className="py-1 space-y-1"
+                                >
                                     <div className="text-5xl font-black text-transparent bg-clip-text bg-gradient-to-r from-amber-300 via-yellow-100 to-orange-400">
                                         ¥{finalResults[revealIdx].amount.toLocaleString()}
                                     </div>
@@ -1044,13 +1094,13 @@ export default function WarikanApp() {
                                             </p>
                                         </div>
                                     )}
-                                </div>
+                                </motion.div>
 
                                 <div className="flex flex-wrap justify-center gap-2.5 pt-1">
                                     <button
                                         type="button"
                                         onClick={handleNextReveal}
-                                        className="rounded-full bg-blue-500 px-6 py-2.5 text-sm font-black text-white shadow-lg hover:bg-blue-400"
+                                        className="hover-spring rounded-full bg-blue-500 px-6 py-2.5 text-sm font-black text-white shadow-lg hover:bg-blue-400"
                                     >
                                         {revealIdx + 1 < finalResults.length
                                             ? "次の人を発表 →"
@@ -1059,19 +1109,24 @@ export default function WarikanApp() {
                                     <button
                                         type="button"
                                         onClick={handleSkipToSummary}
-                                        className="rounded-full border border-slate-500/70 bg-slate-900/70 px-4 py-2.5 text-xs font-bold text-slate-200 hover:bg-slate-800"
+                                        className="hover-spring rounded-full border border-slate-500/70 bg-slate-900/70 px-4 py-2.5 text-xs font-bold text-slate-200 hover:bg-slate-800"
                                     >
                                         ⏭️ 全員の結果を一気に見る
                                     </button>
                                 </div>
-                            </section>
+                            </motion.section>
                         )}
-                    </>
+                    </AnimatePresence>
                 )}
 
                 {/* ─── STEP 5: 精算結果ボード & シェア ─── */}
                 {stage === "summary" && (
-                    <section className="rounded-2xl border border-amber-300/40 bg-slate-950/85 p-5 sm:p-6 backdrop-blur-md shadow-2xl space-y-5">
+                    <motion.section
+                        initial={{ opacity: 0, y: 24, filter: "blur(3px)" }}
+                        animate={{ opacity: 1, y: 0, filter: "blur(0px)" }}
+                        transition={{ duration: 0.4, ease: [0.22, 1, 0.36, 1] }}
+                        className="rounded-2xl border border-amber-300/40 bg-slate-950/85 p-5 sm:p-6 backdrop-blur-md shadow-2xl space-y-5"
+                    >
                         <div className="text-center space-y-1">
                             <p className="text-xs font-bold tracking-widest text-amber-300">
                                 COSMIC SETTLEMENT
@@ -1267,7 +1322,7 @@ export default function WarikanApp() {
                         </div>
 
                         <AdSlot className="pt-4" />
-                    </section>
+                    </motion.section>
                 )}
                 {/* 西郷さん流：男気認定オーバーレイ演出 */}
                 {showOtokogiBanner && otokogiHero && (

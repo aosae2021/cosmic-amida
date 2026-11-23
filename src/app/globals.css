@@ -175,6 +175,36 @@ body {
     background: radial-gradient(ellipse at center, #0d1b4b 0%, #000000 100%);
 }
 
+/* UI Motion Refinement (transitions.dev 準拠トークン) */
+.hover-spring {
+    transition:
+        transform 320ms cubic-bezier(0.34, 3.85, 0.64, 1),
+        background-color 220ms ease,
+        border-color 220ms ease,
+        box-shadow 220ms ease;
+}
+
+.hover-spring:hover:not(:disabled) {
+    transform: translateY(-3px) scale(1.04);
+}
+
+.hover-spring:active:not(:disabled) {
+    transform: translateY(0) scale(0.96);
+}
+
+@keyframes warikan-flash {
+    0% {
+        opacity: 0.85;
+    }
+    100% {
+        opacity: 0;
+    }
+}
+
+.warikan-impact-flash {
+    animation: warikan-flash 380ms cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
 /* ─── カウントダウンオーバーレイ ─── */
 .countdown-overlay {
     position: fixed;
