@@ -25,8 +25,8 @@ export type RevealSubPhase = "idle" | "lockon" | "descending" | "feint" | "lande
 export interface WarikanScene3DProps {
     ladder: WarikanLadder | null;
     activeStartIndex: number | null;
-    /** 0.0 〜 1.0 の降下進捗 */
-    traceProgress: number;
+    /** 0.0 〜 1.0 の降下進捗（毎フレーム React 再レンダリングを避けるため Ref で直接参照） */
+    traceProgressRef: React.MutableRefObject<number>;
     /** 現在のドラマティック演出フェーズ */
     revealPhase?: RevealSubPhase;
     /** 柱ごとの参加者名（インデックス順） */
@@ -82,10 +82,12 @@ function buildTracePoints(ladder: WarikanLadder, startIndex: number): THREE.Vect
         const a = raw[i];
         const b = raw[i + 1];
         const dist = a.distanceTo(b);
-        if (dist > 0.2) {
-            dense.push(a.clone().lerp(b, 0.14));
+        if (dist > 0.25) {
+            // 角をわずかに丸めて流れるように曲がるフィレット補間
+            const fillet = Math.min(0.22, 0.35 / dist);
+            dense.push(a.clone().lerp(b, fillet));
             dense.push(a.clone().lerp(b, 0.5));
-            dense.push(a.clone().lerp(b, 0.86));
+            dense.push(a.clone().lerp(b, 1 - fillet));
         }
         dense.push(b);
     }
@@ -94,19 +96,20 @@ function buildTracePoints(ladder: WarikanLadder, startIndex: number): THREE.Vect
 
 /**
  * 火花を吹き散らしながら光る軌跡を描くボール＆4幕シネマティックカメラ制御
+ * - traceProgressRef を useFrame 内で直接読み、React 再レンダリングゼロで 60/120fps 滑らか駆動
+ * - すべてのカメラ・玉補間にフレームレート非依存の THREE.MathUtils.damp を適用
  */
 function FieryBallAndCamera({
     points,
-    progress,
+    progressRef,
     revealPhase,
 }: {
     points: THREE.Vector3[] | null;
-    progress: number;
+    progressRef: React.MutableRefObject<number>;
     revealPhase: RevealSubPhase;
 }) {
     const { camera, size } = useThree();
     const isPortrait = size.width < size.height;
-    // 上端の名前〜下端の金額まで余裕で1画面に収まる俯瞰距離
     const overviewZ = isPortrait ? 28.5 : 20.0;
     const baseFov = isPortrait ? 60 : 52;
 
@@ -115,14 +118,20 @@ function FieryBallAndCamera({
     const tipPosRef = useRef<THREE.Vector3 | null>(null);
     const tangentRef = useRef(new THREE.Vector3(0, -1, 0));
     const lookAtRef = useRef(new THREE.Vector3(0, 0.1, 0));
+    const smoothedProgressRef = useRef(0);
+    const smoothedPosRef = useRef(new THREE.Vector3());
+    const initializedPosRef = useRef(false);
     const bankRef = useRef(0);
 
     const curve = useMemo(() => {
+        initializedPosRef.current = false;
+        smoothedProgressRef.current = 0;
         if (!points || points.length < 2) return null;
-        return new THREE.CatmullRomCurve3(points, false, "catmullrom", 0.08);
+        return new THREE.CatmullRomCurve3(points, false, "catmullrom", 0.2);
     }, [points]);
 
-    useFrame((state) => {
+    useFrame((state, rawDelta) => {
+        const delta = Math.min(rawDelta, 0.05);
         const elapsed = state.clock.elapsedTime;
         const isActiveCamera =
             revealPhase === "lockon" ||
@@ -130,24 +139,51 @@ function FieryBallAndCamera({
             revealPhase === "feint";
 
         if (curve && ballGroupRef.current && revealPhase !== "idle") {
-            const t =
+            const rawTargetT =
                 revealPhase === "lockon"
                     ? 0
-                    : Math.max(0, Math.min(1, progress));
-            const pos = curve.getPointAt(t);
+                    : revealPhase === "landed"
+                    ? 1
+                    : Math.max(0, Math.min(1, progressRef.current));
+
+            // 進捗そのものを高応答 damp で滑らか化（カクつき完全除去）
+            if (!initializedPosRef.current || rawTargetT < smoothedProgressRef.current) {
+                smoothedProgressRef.current = rawTargetT;
+            } else {
+                smoothedProgressRef.current = THREE.MathUtils.damp(
+                    smoothedProgressRef.current,
+                    rawTargetT,
+                    18,
+                    delta
+                );
+            }
+
+            const t = Math.max(0, Math.min(1, smoothedProgressRef.current));
+            const targetPos = curve.getPointAt(t);
             const tangent = curve.getTangentAt(t).normalize();
+
+            if (!initializedPosRef.current) {
+                smoothedPosRef.current.copy(targetPos);
+                initializedPosRef.current = true;
+            } else {
+                const posLambda = 28;
+                smoothedPosRef.current.x = THREE.MathUtils.damp(smoothedPosRef.current.x, targetPos.x, posLambda, delta);
+                smoothedPosRef.current.y = THREE.MathUtils.damp(smoothedPosRef.current.y, targetPos.y, posLambda, delta);
+                smoothedPosRef.current.z = THREE.MathUtils.damp(smoothedPosRef.current.z, targetPos.z, posLambda, delta);
+            }
+
+            const pos = smoothedPosRef.current;
 
             // 寸止めフェイント中はブルブル震えて臨場感アップ
             const isFeint = revealPhase === "feint";
-            const jitterX = isFeint ? Math.sin(elapsed * 58) * 0.12 : 0;
-            const jitterY = isFeint ? Math.cos(elapsed * 66) * 0.08 : 0;
+            const jitterX = isFeint ? Math.sin(elapsed * 58) * 0.1 : 0;
+            const jitterY = isFeint ? Math.cos(elapsed * 66) * 0.07 : 0;
 
-            // ロックオン中は玉が脈動しながらチャージ
             const ballScale =
                 revealPhase === "lockon"
-                    ? 0.9 + Math.sin(elapsed * 18) * 0.25
+                    ? 0.9 + Math.sin(elapsed * 16) * 0.22
                     : isFeint
-                    ? 1.3 + Math.sin(elapsed * 30) * 0.12
+                    ? 1.28 + Math.sin(elapsed * 28) * 0.1
                     : 1.05;
 
             ballGroupRef.current.position.set(pos.x + jitterX, pos.y + jitterY, pos.z);
@@ -163,56 +199,56 @@ function FieryBallAndCamera({
             }
 
             if (isActiveCamera) {
-                let targetCamPos: THREE.Vector3;
-                let targetLookAt: THREE.Vector3;
+                let targetCamX = 0;
+                let targetCamY = 0;
+                let targetCamZ = overviewZ;
+                let targetLookX = 0;
+                let targetLookY = 0;
                 let targetFov = baseFov;
                 let targetBank = 0;
 
                 if (revealPhase === "lockon") {
-                    // 第1幕：スタート柱の上端（参加者名）へドラマティックにズームイン
-                    const zoomZ = isPortrait ? 12.0 : 9.2;
-                    targetCamPos = new THREE.Vector3(pos.x * 0.95, pos.y + 0.8, zoomZ);
-                    targetLookAt = new THREE.Vector3(pos.x, pos.y - 0.8, 0);
+                    targetCamX = pos.x * 0.95;
+                    targetCamY = pos.y + 0.8;
+                    targetCamZ = isPortrait ? 12.0 : 9.2;
+                    targetLookX = pos.x;
+                    targetLookY = pos.y - 0.8;
                     targetFov = baseFov - 5;
                 } else if (revealPhase === "feint") {
-                    // 第3幕：ゴール直前で超ズーム＋微細カメラシェイク
-                    const zoomZ = isPortrait ? 9.2 : 7.0;
-                    const shakeX = Math.sin(elapsed * 42) * 0.08;
-                    const shakeY = Math.cos(elapsed * 49) * 0.06;
-                    targetCamPos = new THREE.Vector3(
-                        pos.x * 0.9 + shakeX,
-                        pos.y + 0.4 + shakeY,
-                        zoomZ
-                    );
-                    targetLookAt = new THREE.Vector3(pos.x, pos.y - 0.9, 0);
+                    const shakeX = Math.sin(elapsed * 42) * 0.06;
+                    const shakeY = Math.cos(elapsed * 49) * 0.05;
+                    targetCamX = pos.x * 0.9 + shakeX;
+                    targetCamY = pos.y + 0.4 + shakeY;
+                    targetCamZ = isPortrait ? 9.2 : 7.0;
+                    targetLookX = pos.x;
+                    targetLookY = pos.y - 0.9;
                     targetFov = baseFov - 8;
                 } else {
-                    // 第2幕：火花を吹きながら降下を追従（横移動でバンキング＆FOV拡大！）
                     const isHorizontal = Math.abs(tangent.x) > 0.45;
-                    const zoomZ = isPortrait ? 12.5 : 9.6;
-                    targetCamPos = new THREE.Vector3(
-                        pos.x * 0.85 - tangent.x * 1.4,
-                        pos.y + 1.1,
-                        zoomZ
-                    );
-                    targetLookAt = new THREE.Vector3(
-                        pos.x + tangent.x * 0.6,
-                        pos.y - 0.8,
-                        0
-                    );
-                    targetFov = isHorizontal ? baseFov + 7 : baseFov + 2;
-                    targetBank = isHorizontal ? -Math.sign(tangent.x) * 0.11 : 0;
+                    targetCamX = pos.x * 0.85 - tangent.x * 1.2;
+                    targetCamY = pos.y + 1.0;
+                    targetCamZ = isPortrait ? 12.5 : 9.6;
+                    targetLookX = pos.x + tangent.x * 0.45;
+                    targetLookY = pos.y - 0.75;
+                    targetFov = isHorizontal ? baseFov + 6 : baseFov + 2;
+                    targetBank = isHorizontal ? -Math.sign(tangent.x) * 0.09 : 0;
                 }
 
-                camera.position.lerp(targetCamPos, 0.1);
-                lookAtRef.current.lerp(targetLookAt, 0.13);
+                // フレームレート非依存の damp でシルクのように滑らかなカメラ追従
+                camera.position.x = THREE.MathUtils.damp(camera.position.x, targetCamX, 5.5, delta);
+                camera.position.y = THREE.MathUtils.damp(camera.position.y, targetCamY, 5.5, delta);
+                camera.position.z = THREE.MathUtils.damp(camera.position.z, targetCamZ, 5.0, delta);
+
+                lookAtRef.current.x = THREE.MathUtils.damp(lookAtRef.current.x, targetLookX, 7.5, delta);
+                lookAtRef.current.y = THREE.MathUtils.damp(lookAtRef.current.y, targetLookY, 7.5, delta);
+                lookAtRef.current.z = THREE.MathUtils.damp(lookAtRef.current.z, 0, 7.5, delta);
                 camera.lookAt(lookAtRef.current);
 
-                bankRef.current = THREE.MathUtils.lerp(bankRef.current, targetBank, 0.12);
+                bankRef.current = THREE.MathUtils.damp(bankRef.current, targetBank, 6.0, delta);
                 camera.rotation.z += bankRef.current;
 
                 if (camera instanceof THREE.PerspectiveCamera) {
-                    camera.fov = THREE.MathUtils.lerp(camera.fov, targetFov, 0.1);
+                    camera.fov = THREE.MathUtils.damp(camera.fov, targetFov, 5.5, delta);
                     camera.updateProjectionMatrix();
                 }
                 return;
@@ -226,14 +262,18 @@ function FieryBallAndCamera({
 
         // 全体俯瞰カメラ（スタート時・ゴール着弾後：上端の名前〜下端の金額まで丸見え）
         const gentleSwayX = Math.sin(elapsed * 0.35) * 0.45;
-        const overviewPos = new THREE.Vector3(gentleSwayX, 0.15, overviewZ);
-        camera.position.lerp(overviewPos, 0.08);
-        lookAtRef.current.lerp(new THREE.Vector3(0, 0.0, 0), 0.1);
+        camera.position.x = THREE.MathUtils.damp(camera.position.x, gentleSwayX, 4.5, delta);
+        camera.position.y = THREE.MathUtils.damp(camera.position.y, 0.15, 4.5, delta);
+        camera.position.z = THREE.MathUtils.damp(camera.position.z, overviewZ, 4.5, delta);
+
+        lookAtRef.current.x = THREE.MathUtils.damp(lookAtRef.current.x, 0, 5.5, delta);
+        lookAtRef.current.y = THREE.MathUtils.damp(lookAtRef.current.y, 0, 5.5, delta);
+        lookAtRef.current.z = THREE.MathUtils.damp(lookAtRef.current.z, 0, 5.5, delta);
         camera.lookAt(lookAtRef.current);
-        bankRef.current = THREE.MathUtils.lerp(bankRef.current, 0, 0.1);
+        bankRef.current = THREE.MathUtils.damp(bankRef.current, 0, 5.0, delta);
 
         if (camera instanceof THREE.PerspectiveCamera) {
-            camera.fov = THREE.MathUtils.lerp(camera.fov, baseFov, 0.08);
+            camera.fov = THREE.MathUtils.damp(camera.fov, baseFov, 4.5, delta);
             camera.updateProjectionMatrix();
         }
     });
@@ -293,7 +333,7 @@ function FieryBallAndCamera({
 function LadderMeshes({
     ladder,
     activeStartIndex,
-    traceProgress,
+    traceProgressRef,
     revealPhase = "idle",
     pillarNames = [],
     goalAmounts = [],
@@ -451,7 +491,7 @@ function LadderMeshes({
             {/* 火花を吹きながら降下する光の玉＋黄金軌跡＋4幕シネマティックカメラ */}
             <FieryBallAndCamera
                 points={tracePoints}
-                progress={traceProgress}
+                progressRef={traceProgressRef}
                 revealPhase={revealPhase}
             />
         </group>

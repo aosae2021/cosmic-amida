@@ -71,7 +71,7 @@ export default function WarikanApp() {
 
     // ─── Reveal Animation State ───
     const [revealIdx, setRevealIdx] = useState<number>(0);
-    const [traceProgress, setTraceProgress] = useState<number>(0);
+    const traceProgressRef = useRef<number>(0);
     const [revealPhase, setRevealPhase] = useState<RevealSubPhase>("idle");
     const [impactFlashKey, setImpactFlashKey] = useState<number>(0);
     const [copiedSummary, setCopiedSummary] = useState<boolean>(false);
@@ -141,7 +141,7 @@ export default function WarikanApp() {
         setPillarAssignments({});
         setSelectOrderIdx(0);
         setRevealIdx(0);
-        setTraceProgress(0);
+        traceProgressRef.current = 0;
         setRevealPhase("idle");
         setOtokogiOpen(false);
         setOtokogiHero(null);
@@ -306,14 +306,17 @@ export default function WarikanApp() {
         let sweepPlayed = false;
         let holdSoundPlayed = false;
         let dropStarted = false;
+        traceProgressRef.current = 0;
         setRevealPhase("lockon");
-        setTraceProgress(0.005);
         soundManager.playPon();
+
+        // 滑らかな加減速イージング（出だしスッと加速 → 巡航 → 寸止め前で自然にスッと減速）
+        const easeInOutSine = (x: number) => -(Math.cos(Math.PI * x) - 1) / 2;
 
         const tick = (now: number) => {
             const elapsed = now - start;
             if (elapsed < lockonMs) {
-                // lockon 中は state を再セットせず軽量に待機
+                traceProgressRef.current = 0;
                 revealRafRef.current = requestAnimationFrame(tick);
             } else if (elapsed < lockonMs + descentMs) {
                 if (!sweepPlayed) {
@@ -321,13 +324,15 @@ export default function WarikanApp() {
                     setRevealPhase("descending");
                     soundManager.playBallSweep();
                 }
-                const p = (elapsed - lockonMs) / descentMs;
-                setTraceProgress(Math.max(0.01, p * 0.88));
+                const linearP = Math.min(1, (elapsed - lockonMs) / descentMs);
+                // 巡航感を保ちつつ開始・停止だけ優しく丸めるブレンド
+                const smoothP = linearP * 0.72 + easeInOutSine(linearP) * 0.28;
+                traceProgressRef.current = Math.max(0.005, smoothP * 0.88);
                 revealRafRef.current = requestAnimationFrame(tick);
             } else if (elapsed < lockonMs + descentMs + holdMs) {
                 if (!holdSoundPlayed) {
                     holdSoundPlayed = true;
-                    setTraceProgress(0.88);
+                    traceProgressRef.current = 0.88;
                     setRevealPhase("feint");
                     soundManager.playTensionHold();
                 }
@@ -337,12 +342,13 @@ export default function WarikanApp() {
                     dropStarted = true;
                     setRevealPhase("descending");
                 }
-                const dropT = (elapsed - lockonMs - descentMs - holdMs) / dropMs;
-                setTraceProgress(0.88 + dropT * 0.12);
+                const dropT = Math.min(1, (elapsed - lockonMs - descentMs - holdMs) / dropMs);
+                // ラストスパートは加速して着弾インパクトを強調
+                traceProgressRef.current = 0.88 + dropT * dropT * 0.12;
                 revealRafRef.current = requestAnimationFrame(tick);
             } else {
+                traceProgressRef.current = 1;
                 setRevealPhase("landed");
-                setTraceProgress(1);
                 setImpactFlashKey((k) => k + 1);
                 if (currentResult.amount === 0) {
                     soundManager.playResult("大吉");
@@ -373,7 +379,7 @@ export default function WarikanApp() {
     const handleNextReveal = () => {
         if (revealIdx + 1 < finalResults.length) {
             setRevealIdx(revealIdx + 1);
-            setTraceProgress(0);
+            traceProgressRef.current = 0;
             setRevealPhase("lockon");
         } else {
             setRevealPhase("idle");
@@ -384,8 +390,8 @@ export default function WarikanApp() {
 
     const handleSkipToSummary = () => {
         if (revealRafRef.current) cancelAnimationFrame(revealRafRef.current);
+        traceProgressRef.current = 1;
         setRevealPhase("idle");
-        setTraceProgress(1);
         setStage("summary");
         fireSummaryConfetti();
     };
@@ -519,12 +525,12 @@ export default function WarikanApp() {
         if (stage !== "reveal") return [];
         const indices: number[] = [];
         for (let i = 0; i < finalResults.length; i++) {
-            if (i < revealIdx || (i === revealIdx && traceProgress >= 1)) {
+            if (i < revealIdx || (i === revealIdx && revealPhase === "landed")) {
                 indices.push(finalResults[i].goalIndex);
             }
         }
         return indices;
-    }, [stage, memberCount, finalResults, revealIdx, traceProgress]);
+    }, [stage, memberCount, finalResults, revealIdx, revealPhase]);
 
     return (
         <div className="relative min-h-screen w-full text-slate-100 overflow-x-hidden">
@@ -532,7 +538,7 @@ export default function WarikanApp() {
             <WarikanScene3D
                 ladder={stage === "select" || stage === "reveal" || stage === "summary" ? ladder : null}
                 activeStartIndex={activeRevealStart}
-                traceProgress={stage === "reveal" ? traceProgress : 0}
+                traceProgressRef={traceProgressRef}
                 revealPhase={stage === "reveal" ? revealPhase : "idle"}
                 pillarNames={pillarNames}
                 goalAmounts={goalAmounts}
